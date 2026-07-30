@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Smart Money & Sector Flow Radar",
+    page_title="Global Money Flow Radar & Sector Rotation",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -28,25 +28,68 @@ st.sidebar.title("🛠️ Control Panel")
 st.sidebar.markdown("---")
 
 analysis_mode = st.sidebar.radio(
-    "เลือกโหมดวิเคราะห์:",
-    ["📊 Sector Rotation & Asset Flow", "🚨 Volume Change & Smart Money Radar", "💡 Patent & Innovation Moat Watchlist"]
+    "เลือกโหมดวิเคราะห์ภาพใหญ่:",
+    ["🌍 Global Money Flow (รวมทุกเส้น ซ่อน/แสดงได้)", "📊 Sector Rotation & Asset Flow", "🚨 Volume Change & Smart Money Radar", "💡 Patent & Innovation Moat Watchlist"]
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **คำแนะนำจากเพื่อน:** โค้ดนี้ใช้ดึงข้อมูลราคาและวอลุ่มดิบจากตลาดโลก เพื่อสแกนหาจังหวะเล่นรอบตามรอยกองทุนใหญ่!")
+st.sidebar.info("💡 **มุมมองเพื่อน:** ภาพใหญ่ของเงินโลกตอนนี้กำลังวิ่งหาความมั่นคงและนวัตกรรมที่มีสิทธิบัตรผูกขาด มาแกะรอยดูกันว่าเงินไหลไปไหนบ้าง!")
 
-# --- ฟังก์ชันดึงข้อมูลราคาและคำนวณ Volume Change ---
-@st.cache_data(ttl=3600)
-def fetch_market_data(tickers, period="3mo"):
-    data = yf.download(tickers, period=period, group_by="ticker", auto_adjust=True)
-    return data
+# --- โหมดที่ 0: Global Money Flow (รวมเส้นภาพใหญ่ทั้งหมดตามที่มึงต้องการ) ---
+if analysis_mode == "🌍 Global Money Flow (รวมทุกเส้น ซ่อน/แสดงได้)":
+    st.title("🌍 Global Money Flow Macro Radar")
+    st.markdown("ภาพใหญ่กระแสเงินทุนของโลก (S&P 500 Sectors, ทองคำ, Bitcoin และหุ้นนวัตกรรม) มึงสามารถกดคลิกที่ชื่อใน Legend ด้านขวาเพื่อ **Hide (ซ่อน)** หรือ **Show (แสดง)** ทีละเส้นได้ตามใจชอบ เพื่อดูเปรียบเทียบความต่าง!")
+
+    # ดึงข้อมูลสินทรัพย์หลักภาพใหญ่ (ใช้ผลตอบแทนสะสมเทียบจุดเริ่มต้น เพื่อให้อยู่สเกลเดียวกัน 0%)
+    macro_tickers = {
+        "Technology (XLK)": "XLK",
+        "Healthcare (XLV)": "XLV",
+        "Industrials (XLI)": "XLI",
+        "Gold (GC=F)": "GC=F",
+        "Bitcoin (BTC-USD)": "BTC-USD",
+        "NVIDIA (NVDA)": "NVDA",
+        "Fluence Energy (FLNC)": "FLNC"
+    }
+
+    @st.cache_data(ttl=3600)
+    def fetch_multi_assets(tickers_dict, period="6mo"):
+        data_frames = {}
+        for name, symbol in tickers_dict.items():
+            df = yf.download(symbol, period=period, auto_adjust=True)
+            if not df.empty:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.levels[1] else df
+                # คำนวณ % Return สะสมจากวันแรกในรอบ 6 เดือน เพื่อเทียบสเกลกันได้
+                data_frames[name] = ((df['Close'] / df['Close'].iloc[0]) - 1) * 100
+        return pd.DataFrame(data_frames)
+
+    with st.spinner("กำลังดึงข้อมูลกระแสเงินทุนโลกทั้งหมด มาสับให้ดู..."):
+        df_macro = fetch_multi_assets(macro_tickers)
+
+    if not df_macro.empty:
+        st.markdown("### 📈 กราฟเปรียบเทียบผลตอบแทนสะสม (%) - กดที่ชื่อ Legend เพื่อซ่อน/แสดงแต่ละเส้นได้ทันที")
+        
+        fig_macro = px.line(df_macro, title="Global Asset Flow Comparison (% Return Normalized)")
+        fig_macro.update_layout(
+            template="plotly_dark",
+            xaxis_title="วันที่",
+            yaxis_title="ผลตอบแทนสะสมเทียบจุดเริ่มต้น (%)",
+            hovermode="x unified",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_macro, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("### 📊 ตารางสรุปการเปลี่ยนแปลงล่าสุดของแต่ละสินทรัพย์")
+        st.dataframe(df_macro.tail(1).T.rename(columns={df_macro.index[-1]: "ผลตอบแทนสะสมล่าสุด (%)"}), use_container_width=True)
+    else:
+        st.error("ไม่สามารถดึงข้อมูลภาพใหญ่ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง")
 
 # --- โหมดที่ 1: Sector Rotation & Asset Flow ---
-if analysis_mode == "📊 Sector Rotation & Asset Flow":
+elif analysis_mode == "📊 Sector Rotation & Asset Flow":
     st.title("📊 Global Sector Rotation & Cross-Asset Flow")
-    st.markdown("ติดตามการไหลเวียนของเงินทุนระหว่าง S&P 500 Sub-Sectors, ทองคำ และ Bitcoin เพื่อจับทิศทางตลาดรอบนี้")
+    st.markdown("ติดตามการไหลเวียนของเงินทุนรายตัวเพื่อเจาะลึกแบบละเอียด")
 
-    # กำหนดกลุ่มสินทรัพย์
     assets = {
         "Technology (XLK)": "XLK",
         "Communication Services (XLC)": "XLC",
@@ -60,16 +103,11 @@ if analysis_mode == "📊 Sector Rotation & Asset Flow":
     selected_asset_name = st.selectbox("เลือก Sector หรือสินทรัพย์ที่ต้องการเจาะลึก:", list(assets.keys()))
     ticker_symbol = assets[selected_asset_name]
 
-    # ดึงข้อมูลย้อนหลัง 6 เดือน
     df_asset = yf.download(ticker_symbol, period="6mo", auto_adjust=True)
-    
     if not df_asset.empty:
-        # จัดการโครงสร้าง DataFrame ของ yfinance
         if isinstance(df_asset.columns, pd.MultiIndex):
             df_asset = df_asset.xs(ticker_symbol, axis=1, level=1) if ticker_symbol in df_asset.columns.levels[1] else df_asset
 
-        # คำนวณผลตอบแทนสะสมและ Volume Change
-        df_asset['Return_%'] = df_asset['Close'].pct_change() * 100
         df_asset['Vol_MA20'] = df_asset['Volume'].rolling(window=20).mean()
         df_asset['Vol_Spike'] = df_asset['Volume'] / df_asset['Vol_MA20']
 
@@ -83,20 +121,16 @@ if analysis_mode == "📊 Sector Rotation & Asset Flow":
         col2.metric("วอลุ่มเทียบค่าเฉลี่ย 20 วัน", f"{vol_spike_val:.2f}x", "Volume Multiplier")
         col3.metric("สถานะสภาพคล่อง", "High Inflow" if vol_spike_val > 1.2 else "Normal Flow")
 
-        st.markdown("### 📈 กราฟราคาและวอลุ่มย้อนหลัง")
         fig = px.line(df_asset, x=df_asset.index, y='Close', title=f"Price Trend: {selected_asset_name}")
         fig.update_layout(template="plotly_dark", xaxis_title="วันที่", yaxis_title="ราคา (USD)")
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.error("ไม่สามารถดึงข้อมูลได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง")
 
 # --- โหมดที่ 2: Volume Change & Smart Money Radar ---
 elif analysis_mode == "🚨 Volume Change & Smart Money Radar":
     st.title("🚨 Volume Change & Smart Money Radar")
-    st.markdown("สแกนหุ้นนวัตกรรมและเทคโนโลยีระดับโลกที่กำลังมี **Volume Spike** ผิดปกติ ซึ่งเป็นร่องรอยการสะสมของกองทุนสถาบัน")
+    st.markdown("สแกนหุ้นนวัตกรรมและเทคโนโลยีระดับโลกที่มี Volume Spike ผิดปกติ")
 
     watchlist = ["ISRG", "FLNC", "META", "GOOGL", "NVDA", "GE", "TSLA", "AAPL"]
-    
     scan_data = []
     for t in watchlist:
         stock = yf.Ticker(t)
@@ -117,12 +151,11 @@ elif analysis_mode == "🚨 Volume Change & Smart Money Radar":
 
     df_scan = pd.DataFrame(scan_data)
     st.dataframe(df_scan, use_container_width=True)
-    st.info("📌 **วิธีอ่านค่า:** ถ้า Volume Ratio พุ่งทะลุ 1.5x ขึ้นไป แปลว่ามีแรงซื้อขายหนาแน่นผิดปกติ (Block Trade / Institutional Footprint) ให้เช็กข่าวด่วนว่ามีประเด็นสิทธิบัตรหรือผลประกอบการอะไรหนุน!")
 
 # --- โหมดที่ 3: Patent & Innovation Moat Watchlist ---
 else:
     st.title("💡 Patent & Innovation Moat Watchlist")
-    st.markdown("ส่องพอร์ตหุ้นนวัตกรรมที่มี **กำแพงสิทธิบัตร (IP Moat)** หนาแน่น ลอกเลียนแบบยาก และเป็นเป้าหมายของกองทุนระยะยาว")
+    st.markdown("ส่องพอร์ตหุ้นนวัตกรรมที่มีกำแพงสิทธิบัตร (IP Moat) หนาแน่น")
 
     moat_stocks = {
         "ISRG (Intuitive Surgical)": "ผูกขาดตลาดหุ่นยนต์ผ่าตัด da Vinci และ Recurring Revenue จากอุปกรณ์ใช้แล้วทิ้ง",
@@ -141,4 +174,4 @@ else:
             col1.metric("Market Cap", f"${inf.get('marketCap', 0):,}" if inf.get('marketCap') else "N/A")
             col2.metric("Trailing P/E", f"{inf.get('trailingPE', 'N/A')}")
             col3.metric("Profit Margin", f"{inf.get('profitMargins', 0)*100:.2f}%" if inf.get('profitMargins') else "N/A")
-
+            
