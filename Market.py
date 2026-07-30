@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Bullish Sector & Innovation Smart Money Radar",
-    page_icon="🚀",
+    page_title="Global Heatmap & Innovation Smart Money Radar",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -20,23 +20,31 @@ st.markdown("""
     .main { background-color: #0b0f19; color: #e6edf3; }
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
     .stAlert { background-color: #1f242d; color: #c9d1d9; border: 1px solid #383f4a; }
-    .analysis-box { background-color: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; margin-top: 20px; }
+    .analysis-box { background-color: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; margin-top: 25px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🚀 Bullish Sector & Innovation Smart Money Radar")
-st.markdown("เรดาร์คัดกรองเฉพาะ **Sector ที่เป็นขาขึ้นและมี Smart Money ไหลเข้าแรงสุด** ตัดตัวที่ซบเซาทิ้ง อัปเดตสดทุกรีเฟรช")
+st.title("⚡ Global Heatmap Sector & Innovation Smart Money Radar")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุนสะสมผ่าน `% Volume Change (vs 20D MA)` ครบเครื่องทุก Sector Heatmap, Smart Grid, Gold และ Bitcoin เส้นกราฟตรงชัดเจน พร้อมบทวิเคราะห์อัปเดตอัตโนมัติทุกรีเฟรช")
 
-# --- คัดเลือกเฉพาะ Sector ขาขึ้นและสินทรัพย์เกรดพรีเมียมตามรอบข่าวสาร ---
-bullish_radar_assets = {
+# --- รวบรวมทุก Sector ตาม Heatmap + Smart Grid + สินทรัพย์พิเศษตามที่มึงต้องการครบถ้วน ---
+radar_assets = {
+    "Technology (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
+    "Financials (XLF)": "XLF",
+    "Healthcare / Biotech (XLV)": "XLV",
     "Industrials & Smart Grid (XLI)": "XLI",
+    "Consumer Discretionary (XLY)": "XLY",
+    "Consumer Staples (XLP)": "XLP",
     "Energy & Clean Tech (XLE)": "XLE",
+    "Advanced Materials (XLB)": "XLB",
+    "Utilities (XLU)": "XLU",
+    "Gold / Safe Haven (GC=F)": "GC=F",
     "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
-def fetch_bullish_volume_flow(assets_dict):
+def fetch_volume_change_flow(assets_dict):
     volume_frames = {}
     for name, symbol in assets_dict.items():
         df = yf.download(symbol, period="2y", auto_adjust=True)
@@ -55,8 +63,8 @@ def fetch_bullish_volume_flow(assets_dict):
     df_vol = df_vol.ffill().bfill()
     return df_vol
 
-with st.spinner("กำลังคัดกรองและคำนวณ % Volume Change เฉพาะกลุ่มขาขึ้น..."):
-    df_flow = fetch_bullish_volume_flow(bullish_radar_assets)
+with st.spinner("กำลังคำนวณ % Volume Change ทุก Sector และดึงข้อมูลสมาร์ทมันนี่..."):
+    df_flow = fetch_volume_change_flow(radar_assets)
 
 if not df_flow.empty:
     last_date = df_flow.index[-1]
@@ -73,8 +81,8 @@ if not df_flow.empty:
         fig.add_trace(go.Scatter(
             x=df_flow.index, 
             y=df_flow[col], 
-            mode='lines',
-            line=dict(width=1.8),
+            mode='lines', # เส้นกราฟตรง (Linear lines) ชัดเจน
+            line=dict(width=1.5),
             name=col,
             connectgaps=True,
             hoverinfo='skip'
@@ -82,7 +90,7 @@ if not df_flow.empty:
 
     fig.update_layout(
         template="plotly_dark",
-        title="Bullish Sector % Volume Change Flow (Filtered High-Growth View)",
+        title="Full Sector Heatmap & Innovation % Volume Change Flow (Linear View)",
         xaxis_title="วันที่",
         yaxis_title="% Volume Change (vs 20D MA)",
         xaxis=dict(
@@ -91,52 +99,50 @@ if not df_flow.empty:
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.4,
+            y=-0.5,
             xanchor="center",
             x=0.5
         ),
-        margin=dict(b=120)
+        margin=dict(b=150)
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของกลุ่มขาขึ้น")
+    st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของทุก Sector")
     st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_width=True)
 
-    # --- บทวิเคราะห์เฉพาะกลุ่มขาขึ้นและหุ้นตัวเต็งซิ่งๆ ---
+    # --- ส่วนบทวิเคราะห์จัดเต็ม อ่านง่ายสบายตาด้วย Markdown แท้ๆ ---
     st.markdown("""
-        <div class="analysis-box">
-            <h2>🔥 เจาะลึกเฉพาะ Sector ขาขึ้น นวัตกรรม และหุ้นเต็งกระชากพอร์ต</h2>
-            <p><i>คัดเน้นๆ เฉพาะกลุ่มที่งบการเงินโตเร่งตัว มีสิทธิบัตรคุ้มครอง (Patent Moat) และวอลุ่ม Smart Money หนุนหลังเต็มสูบ</i></p>
-            <hr style="border-color: #30363d;">
-            
-            <h3>🧠 1. กลุ่ม Semiconductors & Patent Moat (SMH) — ขาขึ้นรอบใหญ่จาก AI & Deep Tech</h3>
-            <p><b>วิเคราะห์งบและสิทธิบัตร:</b> กลุ่มนี้ยืนหนึ่งเรื่อง Gross Margin ทะลุ 60-80% เพราะมีสิทธิบัตรสถาปัตยกรรมชิปและเครื่องจักรพิมพ์เวเฟอร์ที่คู่แข่งไม่มีทางก๊อปปี้ได้ งบการเงินโตตามรอบการลงทุนโครงสร้างพื้นฐาน AI แบบฉุดไม่อยู่</p>
-            <ul>
-                <li>🚀 <b>ตัวเต็งกระชากพอร์ต (High Beta):</b> <code>NVDA (Nvidia)</code> — เจ้าตลาดฮาร์ดแวร์ปัญญาประดิษฐ์ วอลุ่มเข้าสะสมหนาแน่นทุกครั้งที่ย่อตัว</li>
-                <li>💎 <b>ของดีพรีเมียม (Core Patent Moat):</b> <code>ASML (ASML Holding)</code> — ผูกขาดเครื่องพิมพ์ EUV ลิขสิทธิ์ระดับโลก โรงงานชิปไหนก็ขาดไม่ได้ งบแกร่งกระแสเงินสดล้น</li>
-            </ul>
+    <div class="analysis-box">
+    <h2>🧬 บทวิเคราะห์เจาะลึก Sector Heatmap, Smart Grid, สิทธิบัตร และหุ้นเต็ง</h2>
+    <p><i>วิเคราะห์สดผ่านระบบทุกรีเฟรช ครบเครื่องทุกกลุ่มสินทรัพย์ที่มึงสั่ง เกาะติดกระแสเงินทุนสมาร์ทมันนี่แบบคมๆ</i></p>
+    <hr style="border-color: #30363d;">
+    
+    ### 🔥 1. กลุ่ม Semiconductors & Patent Moat (SMH / XLK)
+    * **วิเคราะห์งบและสิทธิบัตร:** งบเด่นเรื่อง Gross Margin สูงลิ่ว (50-80%) เพราะมีสิทธิบัตรคุ้มครองสถาปัตยกรรมชิปและเครื่องพิมพ์ EUV ลิขสิทธิ์เฉพาะตัวที่คู่แข่งก๊อปปี้ไม่ได้ วอลุ่มพุ่งรับรอบขยายกำลังผลิต AI Hardware
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `NVDA (Nvidia)` — เจ้าตลาดฮาร์ดแวร์ AI วอลุ่มหนาแน่น พอร์ตเขียวไวสุด
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `ASML (ASML Holding)` — ผูกขาดเครื่องพิมพ์ EUV รายเดียวในโลก งบแกร่ง รายได้มั่นคงตามดีมานด์ชิปล้ำยุค
 
-            <h3>⚡ 2. กลุ่ม Industrials & Smart Grid (XLI) — ขาขึ้นจากวิกฤตพลังงานและ Data Center</h3>
-            <p><b>วิเคราะห์งบและสิทธิบัตร:</b> งบการเงินเติบโตแบบก้าวกระโดดจาก Backlog สั่งซื้อล่วงหน้ายาวเหยียด สิทธิบัตรเน้นเรื่องระบบส่งไฟฟ้าแรงสูงและซอฟต์แวร์จัดการกริดอัจฉริยะ รองรับการแห่สร้าง Data Center ทั่วโลก</p>
-            <ul>
-                <li>🚀 <b>ตัวเต็งกระชากพอร์ต (High Beta):</b> <code>GE Vernova (GEV)</code> — หุ้นม้ามืดด้านกังหันก๊าซและกริดไฟฟ้า ยอดจองล้นทะลัก วอลุ่มพุ่งแรงสะใจ</li>
-                <li>💎 <b>ของดีพรีเมียม (Core Patent Moat):</b> <code>Eaton Corp (ETN)</code> — ผู้นำสวิตช์เกียร์และหม้อแปลงไฟฟ้าอัจฉริยะ งบสม่ำเสมอ ความได้เปรียบทางวิศวกรรมสูงปรี๊ด</li>
-            </ul>
+    ### ⚡ 2. กลุ่ม Industrials & Smart Grid (XLI)
+    * **วิเคราะห์งบและสิทธิบัตร:** งบโตต่อเนื่องจาก Backlog (ยอดสั่งซื้อรอส่งมอบ) ทุบสถิติ สิทธิบัตรเน้นระบบส่งกำลังไฟฟ้าแรงดันสูงและซอฟต์แวร์บริหารกริดอัจฉริยะ รองรับการแห่สร้าง Data Center ทั่วโลก
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `GE Vernova (GEV)` — ผู้นำกังหันก๊าซและโครงสร้างพื้นฐานกริดไฟฟ้า ยอดจองล้นทะลัก วอลุ่มเหวี่ยงสะใจสายเก็งกำไร
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Eaton Corp (ETN)` — เบอร์หนึ่งเรื่องหม้อแปลงและสวิตช์เกียร์อัจฉริยะ งบสม่ำเสมอ ความได้เปรียบทางวิศวกรรมสูง
 
-            <h3>🔋 3. กลุ่ม Energy & Clean Tech (XLE) — ขาขึ้นรอบสั้นจากนวัตกรรมกักเก็บพลังงาน</h3>
-            <p><b>วิเคราะห์งบและสิทธิบัตร:</b> งบกำลังพลิกฟื้นและเร่งตัวจากการลงทุนระบบกักเก็บพลังงาน (BESS) และเซลล์เชื้อเพลิง สิทธิบัตรเคมีแบตเตอรี่คือเกราะคุ้มกันชั้นดี วอลุ่มมักจะสวิงแรงตามดีลโปรเจกต์ระดับเมกะโปรเจกต์</p>
-            <ul>
-                <li>🚀 <b>ตัวเต็งกระชากพอร์ต (High Beta):</b> <code>Bloom Energy (BE)</code> — ผู้นำเซลล์เชื้อเพลิงผลิตไฟฟ้านอกกริดป้อน Data Center วอลุ่มเหวี่ยงทำกำไรดีมาก</li>
-                <li>💎 <b>ของดีพรีเมียม (Core Patent Moat):</b> <code>Fluence Energy (FLNC)</code> — เบอร์ใหญ่ระบบ BESS โลก มีซอฟต์แวร์บริหารกริดลิขสิทธิ์เฉพาะตัว</li>
-            </ul>
+    ### 🔋 3. กลุ่ม Energy & Clean Tech (XLE)
+    * **วิเคราะห์งบและสิทธิบัตร:** อยู่ในช่วงเร่งลงทุน R&D นวัตกรรมกักเก็บพลังงาน (BESS) และเซลล์เชื้อเพลิง สิทธิบัตรเคมีแบตเตอรี่คือหัวใจสำคัญ วอลุ่มมักจะสวิงแรงตามข่าวดีลโครงการพลังงานขนาดใหญ่
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bloom Energy (BE)` — โดดเด่นเรื่องเซลล์เชื้อเพลิงผลิตไฟฟ้านอกกริด (Microgrid) ป้อนให้ Data Center วอลุ่มเข้าไวออกไว
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Fluence Energy (FLNC)` — ผู้นำระบบ BESS ระดับโลก มีซอฟต์แวร์ควบคุมกริดที่จดลิขสิทธิ์แน่นหนา
 
-            <h3>💰 4. กลุ่ม Bitcoin & Global Liquidity (BTC-USD) — ขาขึ้นจากกระแสเงินสดมหภาค</h3>
-            <p><b>วิเคราะห์งบและสิทธิบัตร:</b> ไม่มีงบการเงินบริษัท แต่วัดกันที่สภาพคล่องโลก (Global Liquidity) และนโยบายการเงิน วอลุ่มพุ่งทะยานไวที่สุดในบรรดาสินทรัพย์ทั้งหมดเมื่อเงินเฟ้อหรือดอกเบี้ยเป็นใจ</p>
-            <ul>
-                <li>🚀 <b>ตัวเต็งกระชากพอร์ต (High Beta):</b> <code>Bitcoin (BTC)</code> — สินทรัพย์สินสุทธิที่ดูดสภาพคล่องไวและรุนแรงที่สุด เหมาะกับการเล่นรอบสั้นทำกำไรกระชากใจ</li>
-            </ul>
-        </div>
+    ### 🧪 4. กลุ่ม Advanced Materials & Healthcare (XLB / XLV)
+    * **วิเคราะห์งบและสิทธิบัตร:** เติบโตตามความต้องการวัสดุศาสตร์เกรดพิเศษในอากาศยานและเซมิคอนดักเตอร์ รวมถึงสิทธิบัตรยาและเครื่องมือแพทย์เฉพาะทางที่ทำกำไรมหาศาล
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `MP Materials (MP)` — เหมืองแร่หายาก (Rare Earth) ของสหรัฐฯ วอลุ่มตอบสนองไวตามประเด็นซัพพลายเชน
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Eli Lilly (LLY)` — เจ้าตลาดนวัตกรรมยาต้านโรคอ้วนและเบาหวาน สิทธิบัตรแน่น งบโตระเบิด
+
+    ### 💰 5. กลุ่ม Bitcoin (BTC-USD) & Gold (GC=F)
+    * **วิเคราะห์งบและสิทธิบัตร:** ไม่มีงบการเงินบริษัท แต่วัดกันที่สภาพคล่องมหภาค (Global Liquidity) และนโยบายการเงิน วอลุ่มพุ่งกระจายตามตัวเลขเงินเฟ้อและความเสี่ยงเชิงระบบ
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bitcoin (BTC)` — สินทรัพย์สภาพคล่องสูงที่ตอบสนองไวที่สุดในพอร์ต
+    * 💎 **ของดีพรีเมียม (Core Safe Haven):** `Gold (GC=F)` — สินทรัพย์ปลอดภัยดั้งเดิม เสถียรและป้องกันความเสี่ยงดีเยี่ยม
+    </div>
     """, unsafe_allow_html=True)
 
 else:
