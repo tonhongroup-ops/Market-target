@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Global Macro Flow & Innovation Radar",
+    page_title="Global Heatmap & Innovation Theme Radar",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -23,25 +23,31 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🌍 Global Macro & Innovation Sector Flow Radar")
-st.markdown("เรดาร์ติดตามกระแสเงินทุนภาพใหญ่ของโลก (ย้อนหลัง 2 ปี | เฉพาะ Sector และสินทรัพย์ภาพใหญ่ ไม่มีหุ้นรายตัวรบกวนใจ)")
+st.title("🌍 Global Heatmap Sector & Innovation Radar")
+st.markdown("เรดาร์ติดตามกระแสเงินทุนภาพใหญ่: Heatmap Sectors + Gold + Bitcoin + Grid + Patent Moat + Clean Tech + Advanced Materials (ย้อนหลัง 2 ปี | เผื่อขวา 15%)")
 
-# --- ล็อกพิกัดเฉพาะภาพใหญ่ (Macro & Innovation Sectors) ---
-macro_sectors = {
-    "Technology / AI Infrastructure (XLK)": "XLK",
-    "Healthcare / MedTech & Biotech (XLV)": "XLV",
-    "Industrials & Smart Grid (XLI)": "XLI",
+# --- รวบรวม Sector ตาม Heatmap + สินทรัพย์พิเศษที่มึงสั่ง ---
+radar_assets = {
+    # Heatmap Core Sectors (US SPDR ETFs)
+    "Technology (XLK)": "XLK",
+    "Semiconductors / Patent Moat (SMH)": "SMH",
+    "Financials (XLF)": "XLF",
+    "Healthcare / Biotech (XLV)": "XLV",
+    "Industrials & Grid (XLI)": "XLI",
     "Consumer Discretionary (XLY)": "XLY",
-    "Energy & Clean Tech / BESS (XLE)": "XLE",
+    "Consumer Staples (XLP)": "XLP",
+    "Energy & Clean Tech (XLE)": "XLE",
+    "Advanced Materials (XLB)": "XLB",
+    "Utilities (XLU)": "XLU",
+    # Custom Assets ตามสั่ง
     "Gold / Safe Haven (GC=F)": "GC=F",
-    "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD",
-    "Global Bond / Debt Market (TLT)": "TLT"
+    "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
-def fetch_macro_net_flow(sectors_dict):
+def fetch_custom_net_flow(assets_dict):
     data_frames = {}
-    for name, symbol in sectors_dict.items():
+    for name, symbol in assets_dict.items():
         df = yf.download(symbol, period="2y", auto_adjust=True)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
@@ -50,19 +56,19 @@ def fetch_macro_net_flow(sectors_dict):
     
     df_combined = pd.DataFrame(data_frames)
     df_combined = df_combined.ffill().bfill()
-    # คำนวณ % มูลค่าสะสมเทียบจุดเริ่มต้น (Base 0%) เพื่อดูทิศทางเม็ดเงินที่ไหลเข้าออกจริง
+    # คำนวณมูลค่าสะสมเทียบจุดเริ่มต้น (Base 0%)
     df_net_value = ((df_combined / df_combined.iloc[0]) - 1) * 100
     return df_net_value
 
-with st.spinner("กำลังประมวลผลกระแสเงินทุนระดับมหภาค..."):
-    df_flow = fetch_macro_net_flow(macro_sectors)
+with st.spinner("กำลังประมวลผลกระแสเงินทุนแบบจัดเต็ม..."):
+    df_flow = fetch_custom_net_flow(radar_assets)
 
 if not df_flow.empty:
     last_date = df_flow.index[-1]
     first_date = df_flow.index[0]
     total_days = (last_date - first_date).days
     
-    # เผื่อพื้นที่ว่างด้านขวาของกราฟไว้ 15% ตามสั่ง
+    # เว้นพื้นที่ว่างด้านขวาของกราฟไว้ 15% ตามสั่ง
     padding_days = int(total_days * 0.15)
     max_x_limit = last_date + timedelta(days=padding_days)
 
@@ -75,31 +81,31 @@ if not df_flow.empty:
             mode='lines',
             line=dict(width=2),
             name=col,
-            connectgaps=True,
-            hoverinfo='skip' # ปิดข้อมูลเกะกะเวลาเอาเมาส์จิ้ม
+            connectgaps=True,         # เส้นทึบเชื่อมเนียนกริบ
+            hoverinfo='skip'          # ปิดกล่องข้อความตอนเมาส์จิ้มตามสั่ง
         ))
 
     fig.update_layout(
         template="plotly_dark",
-        title="Macro Sector & Asset Net Value Flow (2-Year Clean View)",
+        title="Heatmap & Innovation Asset Net Value Flow (2-Year Clean View)",
         xaxis_title="วันที่",
-        yaxis_title="ผลตอบแทนมูลค่าสะสม (%)",
+        yaxis_title="มูลค่าสะสมเทียบจุดเริ่มต้น (%)",
         xaxis=dict(
-            range=[first_date, max_x_limit]
+            range=[first_date, max_x_limit] # ขยายขวา 15%
         ),
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.35,                  # ย้ายปุ่มเปิด-ปิด (Legend) มาไว้ด้านล่างกราฟ
+            y=-0.4,                   # ย้าย Legend มาไว้ด้านล่าง เปิด-ปิดสะดวก
             xanchor="center",
             x=0.5
         ),
-        margin=dict(b=100)
+        margin=dict(b=120)
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 📋 ตารางสรุปการเปลี่ยนแปลงของมูลค่าสะสม Sector ภาพใหญ่ล่าสุด (%)")
+    st.markdown("### 📋 ตารางสรุปมูลค่าสะสมล่าสุด (%) ของแต่ละ Sector")
     st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "Net Value Flow (%)"}), use_container_width=True)
 
 else:
