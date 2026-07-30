@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,40 +25,35 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📈 Global Heatmap Sector & Innovation Volume Radar")
-st.markdown("เรดาร์ติดตามกระแสปริมาณการซื้อขาย (% Volume Change) สะท้อนการไหลเข้าของ Smart Money แบบเรียลไทม์ (ย้อนหลัง 2 ปี | ขยายขวา 15% | ไม่มี Hover Info กวนใจ)")
+st.title("📈 Global Heatmap Sector & Innovation % Volume Change Radar")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุนสะสมผ่านอัตราการเปลี่ยนแปลงของวอลุ่ม (% Volume Change vs 20D MA) | ย้อนหลัง 2 ปี | คลีนไร้รอยต่อ")
 
-# --- รวบรวม Sector ตาม Heatmap + สินทรัพย์พิเศษตามสั่ง ---
+# --- พิกัด Sector ตาม Heatmap + สินทรัพย์พิเศษตามสั่ง ---
 radar_assets = {
-    # Heatmap Core Sectors (US SPDR ETFs)
     "Technology (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
     "Financials (XLF)": "XLF",
     "Healthcare / Biotech (XLV)": "XLV",
-    "Industrials & Grid (XLI)": "XLI",
+    "Industrials & Smart Grid (XLI)": "XLI",
     "Consumer Discretionary (XLY)": "XLY",
     "Consumer Staples (XLP)": "XLP",
     "Energy & Clean Tech (XLE)": "XLE",
     "Advanced Materials (XLB)": "XLB",
     "Utilities (XLU)": "XLU",
-    # Custom Assets ตามสั่ง
     "Gold / Safe Haven (GC=F)": "GC=F",
     "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
 def fetch_volume_change_flow(assets_dict):
-    data_frames = {}
     volume_frames = {}
-    
     for name, symbol in assets_dict.items():
         df = yf.download(symbol, period="2y", auto_adjust=True)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.levels[1] else df
-            data_frames[name] = df['Close']
             if 'Volume' in df.columns:
-                # คำนวณ % Volume Change เทียบกับค่าเฉลี่ย 20 วันย้อนหลัง
+                # คำนวณ % Volume Change เทียบกับค่าเฉลี่ย 20 วัน
                 vol_sma = df['Volume'].rolling(window=20).mean()
                 vol_change = ((df['Volume'] - vol_sma) / vol_sma) * 100
                 volume_frames[name] = vol_change
@@ -67,7 +64,7 @@ def fetch_volume_change_flow(assets_dict):
     df_vol = df_vol.ffill().bfill()
     return df_vol
 
-with st.spinner("กำลังประมวลผล % Volume Change ของ Smart Money..."):
+with st.spinner("กำลังคำนวณ % Volume Change ของสมาร์ทมันนี่..."):
     df_flow = fetch_volume_change_flow(radar_assets)
 
 if not df_flow.empty:
@@ -75,7 +72,7 @@ if not df_flow.empty:
     first_date = df_flow.index[0]
     total_days = (last_date - first_date).days
     
-    # เว้นพื้นที่ว่างด้านขวาของกราฟไว้ 15% ตามสั่ง
+    # เผื่อพื้นที่ว่างด้านขวาของกราฟไว้ 15% ตามสั่ง
     padding_days = int(total_days * 0.15)
     max_x_limit = last_date + timedelta(days=padding_days)
 
@@ -89,7 +86,7 @@ if not df_flow.empty:
             line=dict(width=1.5),
             name=col,
             connectgaps=True,
-            hoverinfo='skip' # ปิดกล่องข้อความตอนเอาเมาส์จิ้มตามสั่ง
+            hoverinfo='skip' # ปิดกล่องข้อความกวนใจเวลาเมาส์ชี้
         ))
 
     fig.update_layout(
@@ -98,12 +95,12 @@ if not df_flow.empty:
         xaxis_title="วันที่",
         yaxis_title="% Volume Change (vs 20D MA)",
         xaxis=dict(
-            range=[first_date, max_x_limit] # ขยายขวา 15%
+            range=[first_date, max_x_limit]
         ),
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.4,                   # ย้าย Legend มาไว้ด้านล่าง เปิด-ปิดสะดวก
+            y=-0.4,
             xanchor="center",
             x=0.5
         ),
