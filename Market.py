@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Global Money Flow Macro Radar",
+    page_title="Global Macro Money Flow Radar",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -23,9 +23,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌍 Global Macro Money Flow Radar")
-st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (สเกลเทียบจุดเริ่มต้น 0%) เพื่อดูว่าสภาพคล่องกำลังไหลเข้าสินทรัพย์หรือ Sector ไหนแบบเคลียร์ๆ")
+st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (ย้อนหลัง 2 ปี | สเกลเทียบจุดเริ่มต้น 0%)")
 
-# --- กำหนดเฉพาะสินทรัพย์ภาพใหญ่ (ไม่เอาหุ้นรายตัวมารก) ---
+# --- กำหนดเฉพาะสินทรัพย์ภาพใหญ่ ---
 macro_assets = {
     "Technology (XLK)": "XLK",
     "Healthcare (XLV)": "XLV",
@@ -37,7 +37,8 @@ macro_assets = {
     "Global Bond (TLT)": "TLT"
 }
 
-time_period = st.sidebar.selectbox("เลือกช่วงเวลาภาพใหญ่:", ["3mo", "6mo", "1y", "ytd"], index=1)
+# ล็อกเวลาไว้ที่ 2 ปีล่าสุดตามที่มึงต้องการ
+time_period = "2y"
 
 @st.cache_data(ttl=3600)
 def fetch_macro_flow(tickers_dict, period):
@@ -47,15 +48,23 @@ def fetch_macro_flow(tickers_dict, period):
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.levels[1] else df
-            # คำนวณ % Return สะสมเทียบจุดเริ่มต้น
+            # คำนวณ % Return สะสมเทียบจุดเริ่มต้นของช่วงเวลา
             data_frames[name] = ((df['Close'] / df['Close'].iloc[0]) - 1) * 100
     return pd.DataFrame(data_frames)
 
-with st.spinner("กำลังประมวลผลข้อมูลภาพใหญ่ของโลก..."):
+with st.spinner("กำลังดึงข้อมูลภาพใหญ่ย้อนหลัง 2 ปี..."):
     df_macro = fetch_macro_flow(macro_assets, time_period)
 
 if not df_macro.empty:
-    # สร้างกราฟด้วย Plotly
+    # คำนวณวันล่าสุดในข้อมูล เพื่อเอามาทำขอบขวาเผื่อที่ว่าง 15%
+    last_date = df_macro.index[-1]
+    first_date = df_macro.index[0]
+    total_days = (last_date - first_date).days
+    
+    # เพิ่มระยะเวลาไปข้างหน้าอีกประมาณ 15% ของช่วงเวลาทั้งหมด เพื่อให้ฝั่งขวามีช่องว่างหายใจ
+    padding_days = int(total_days * 0.15)
+    max_x_limit = last_date + timedelta(days=padding_days)
+
     fig = go.Figure()
 
     for col in df_macro.columns:
@@ -64,29 +73,32 @@ if not df_macro.empty:
             y=df_macro[col], 
             mode='lines', 
             name=col,
-            hovertemplate='%{y:.2f}%<extra></extra>' # ตัดข้อมูลขยะออก ให้เหลือแค่ตัวเลข % คลีนๆ
+            hovertemplate='%{y:.2f}%<extra></extra>' # แสดงแค่ตัวเลข % คลีนๆ
         ))
 
-    # ย้าย Legend ลงมาไว้ด้านล่างกราฟ และจัดระเบียบ Hover ให้ไม่เกะกะ
+    # เซ็ตค่าให้แกน X เผื่อพื้นที่ว่างด้านขวา และจัดวาง Legend ไว้ข้างล่าง
     fig.update_layout(
         template="plotly_dark",
-        title="Macro Asset Flow Comparison (% Return)",
+        title="Macro Asset Flow Comparison (2-Year View with Right Padding)",
         xaxis_title="วันที่",
         yaxis_title="ผลตอบแทนสะสม (%)",
         hovermode="x unified",
+        xaxis=dict(
+            range=[first_date, max_x_limit] # บังคับขอบเขตแกน X ให้มีพื้นที่ว่างทางขวา 15%
+        ),
         legend=dict(
-            orientation="h",          # จัดเรียงแนวนอน
+            orientation="h",
             yanchor="top",
-            y=-0.25,                  # ดันลงมาไว้ใต้กราฟ
+            y=-0.25,                  # ดัน Legend ลงมาไว้ใต้กราฟ
             xanchor="center",
             x=0.5
         ),
-        margin=dict(b=80)             # เว้นพื้นที่ด้านล่างให้ Legend ไม่ชนขอบ
+        margin=dict(b=80)
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 📊 ตารางสรุปผลตอบแทนสะสมล่าสุด (%)")
+    st.markdown("### 📊 ตารางสรุปผลตอบแทนสะสมล่าสุด (%) ในรอบ 2 ปี")
     st.dataframe(df_macro.tail(1).T.rename(columns={df_macro.index[-1]: "Return (%)"}), use_container_width=True)
 
 else:
