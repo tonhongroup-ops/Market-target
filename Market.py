@@ -118,13 +118,14 @@ if not df_flow.empty:
             xanchor="center",
             x=0.5
         ),
-        margin=dict(b=160)
+        margin=dict(b=160),
+        dragmode='zoom'
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    # ใส่ config ควบคุมการซูมบนมือถือให้ใช้งานง่าย ไม่เผลอค้าง
+    st.plotly_chart(fig, use_container_width=True, config={'scrollZoom': True, 'displayModeBar': True, 'modeBarButtonsToRemove': ['lasso2d', 'select2d']})
 
     st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของทุก Sector")
-    # แก้ไขจุดที่พังโดยเอาพารามิเตอร์เกินออก เหลือแค่ use_container_width=True ตามมาตรฐาน Streamlit
     st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_width=True)
 
     # --- ส่วนบทวิเคราะห์: คัดเฉพาะ Sector ขาขึ้นตัวจริงที่มีของ มาชำแหละให้เห็นจะๆ ---
