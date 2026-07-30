@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌍 Global Macro Money Flow Radar")
-st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (ย้อนหลัง 2 ปี | สเกลเทียบจุดเริ่มต้น 0% | เส้นทึบเต็มตา)")
+st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (ย้อนหลัง 2 ปี | จัดเรียงเส้นให้เนียนสนิท)")
 
 # --- กำหนดเฉพาะสินทรัพย์ภาพใหญ่ ---
 macro_assets = {
@@ -37,7 +37,6 @@ macro_assets = {
     "Global Bond (TLT)": "TLT"
 }
 
-# ล็อกเวลาไว้ที่ 2 ปีล่าสุด
 time_period = "2y"
 
 @st.cache_data(ttl=3600)
@@ -48,15 +47,23 @@ def fetch_macro_flow(tickers_dict, period):
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.levels[1] else df
-            # คำนวณ % Return สะสมเทียบจุดเริ่มต้นของช่วงเวลา
-            data_frames[name] = ((df['Close'] / df['Close'].iloc[0]) - 1) * 100
-    return pd.DataFrame(data_frames)
+            # ดึงเฉพาะราคาปิด
+            data_frames[name] = df['Close']
+            
+    # รวม DataFrame เข้าด้วยกัน
+    df_combined = pd.DataFrame(data_frames)
+    
+    # เติมข้อมูลช่วงวันหยุด (Forward Fill) เพื่อไม่ให้เกิดช่องว่างข้อมูลที่ทำให้เส้นขาด
+    df_combined = df_combined.ffill().bfill()
+    
+    # คำนวณ % Return สะสมเทียบจุดเริ่มต้น
+    df_return = ((df_combined / df_combined.iloc[0]) - 1) * 100
+    return df_return
 
-with st.spinner("กำลังดึงข้อมูลภาพใหญ่ย้อนหลัง 2 ปี..."):
+with st.spinner("กำลังจัดระเบียบข้อมูลกระแสเงินทุนโลก..."):
     df_macro = fetch_macro_flow(macro_assets, time_period)
 
 if not df_macro.empty:
-    # คำนวณวันล่าสุด เพื่อทำขอบขวาเผื่อพื้นที่ว่าง 15%
     last_date = df_macro.index[-1]
     first_date = df_macro.index[0]
     total_days = (last_date - first_date).days
@@ -70,21 +77,22 @@ if not df_macro.empty:
         fig.add_trace(go.Scatter(
             x=df_macro.index, 
             y=df_macro[col], 
-            mode='lines',            # โหมดเส้นตรง
-            line=dict(width=2),      # บังคับเป็นเส้นทึบหนาพอดีตา ไม่มีประ
+            mode='lines',            
+            line=dict(width=2.5),    # เส้นทึบหนาเต็มตา
             name=col,
+            connectgaps=True,        # คำสั่งบังคับเชื่อมช่องว่างข้อมูลให้ต่อกันสนิท
             hovertemplate='%{y:.2f}%<extra></extra>'
         ))
 
-    # เซ็ตค่าแกน X เผื่อพื้นที่ว่าง 15% และวาง Legend ไว้ใต้กราฟแบบเส้นทึบ
     fig.update_layout(
         template="plotly_dark",
-        title="Macro Asset Flow Comparison (2-Year View, Solid Lines)",
+        title="Macro Asset Flow Comparison (Solid & Connected Lines)",
         xaxis_title="วันที่",
         yaxis_title="ผลตอบแทนสะสม (%)",
         hovermode="x unified",
         xaxis=dict(
-            range=[first_date, max_x_limit]
+            range=[first_date, max_x_limit],
+            type='date'
         ),
         legend=dict(
             orientation="h",
