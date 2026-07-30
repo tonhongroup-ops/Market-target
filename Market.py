@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Global Heatmap & Innovation Theme Radar",
-    page_icon="⚡",
+    page_title="Global Heatmap & Innovation Volume Radar",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -23,10 +23,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🌍 Global Heatmap Sector & Innovation Radar")
-st.markdown("เรดาร์ติดตามกระแสเงินทุนภาพใหญ่: Heatmap Sectors + Gold + Bitcoin + Grid + Patent Moat + Clean Tech + Advanced Materials (ย้อนหลัง 2 ปี | เผื่อขวา 15%)")
+st.title("📈 Global Heatmap Sector & Innovation Volume Radar")
+st.markdown("เรดาร์ติดตามกระแสปริมาณการซื้อขาย (% Volume Change) สะท้อนการไหลเข้าของ Smart Money แบบเรียลไทม์ (ย้อนหลัง 2 ปี | ขยายขวา 15% | ไม่มี Hover Info กวนใจ)")
 
-# --- รวบรวม Sector ตาม Heatmap + สินทรัพย์พิเศษที่มึงสั่ง ---
+# --- รวบรวม Sector ตาม Heatmap + สินทรัพย์พิเศษตามสั่ง ---
 radar_assets = {
     # Heatmap Core Sectors (US SPDR ETFs)
     "Technology (XLK)": "XLK",
@@ -45,23 +45,30 @@ radar_assets = {
 }
 
 @st.cache_data(ttl=3600)
-def fetch_custom_net_flow(assets_dict):
+def fetch_volume_change_flow(assets_dict):
     data_frames = {}
+    volume_frames = {}
+    
     for name, symbol in assets_dict.items():
         df = yf.download(symbol, period="2y", auto_adjust=True)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
                 df = df.xs(symbol, axis=1, level=1) if symbol in df.columns.levels[1] else df
             data_frames[name] = df['Close']
-    
-    df_combined = pd.DataFrame(data_frames)
-    df_combined = df_combined.ffill().bfill()
-    # คำนวณมูลค่าสะสมเทียบจุดเริ่มต้น (Base 0%)
-    df_net_value = ((df_combined / df_combined.iloc[0]) - 1) * 100
-    return df_net_value
+            if 'Volume' in df.columns:
+                # คำนวณ % Volume Change เทียบกับค่าเฉลี่ย 20 วันย้อนหลัง
+                vol_sma = df['Volume'].rolling(window=20).mean()
+                vol_change = ((df['Volume'] - vol_sma) / vol_sma) * 100
+                volume_frames[name] = vol_change
+            else:
+                volume_frames[name] = pd.Series(0, index=df.index)
+                
+    df_vol = pd.DataFrame(volume_frames)
+    df_vol = df_vol.ffill().bfill()
+    return df_vol
 
-with st.spinner("กำลังประมวลผลกระแสเงินทุนแบบจัดเต็ม..."):
-    df_flow = fetch_custom_net_flow(radar_assets)
+with st.spinner("กำลังประมวลผล % Volume Change ของ Smart Money..."):
+    df_flow = fetch_volume_change_flow(radar_assets)
 
 if not df_flow.empty:
     last_date = df_flow.index[-1]
@@ -79,17 +86,17 @@ if not df_flow.empty:
             x=df_flow.index, 
             y=df_flow[col], 
             mode='lines',
-            line=dict(width=2),
+            line=dict(width=1.5),
             name=col,
-            connectgaps=True,         # เส้นทึบเชื่อมเนียนกริบ
-            hoverinfo='skip'          # ปิดกล่องข้อความตอนเมาส์จิ้มตามสั่ง
+            connectgaps=True,
+            hoverinfo='skip' # ปิดกล่องข้อความตอนเอาเมาส์จิ้มตามสั่ง
         ))
 
     fig.update_layout(
         template="plotly_dark",
-        title="Heatmap & Innovation Asset Net Value Flow (2-Year Clean View)",
+        title="Sector & Innovation % Volume Change Flow (2-Year Clean View)",
         xaxis_title="วันที่",
-        yaxis_title="มูลค่าสะสมเทียบจุดเริ่มต้น (%)",
+        yaxis_title="% Volume Change (vs 20D MA)",
         xaxis=dict(
             range=[first_date, max_x_limit] # ขยายขวา 15%
         ),
@@ -105,8 +112,8 @@ if not df_flow.empty:
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("### 📋 ตารางสรุปมูลค่าสะสมล่าสุด (%) ของแต่ละ Sector")
-    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "Net Value Flow (%)"}), use_container_width=True)
+    st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของแต่ละ Sector")
+    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_width=True)
 
 else:
     st.error("ไม่สามารถดึงข้อมูลได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง")
