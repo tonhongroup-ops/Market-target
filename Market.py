@@ -8,13 +8,13 @@ from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Global Heatmap & Innovation Smart Money Radar",
+    page_title="Global Heatmap & Smart Money Radar",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- Theme CSS สไตล์นักวิเคราะห์มืออาชีพ ---
+# --- Theme CSS สไตล์นักวิเคราะห์มือโปร ---
 st.markdown("""
     <style>
     .main { background-color: #0b0f19; color: #e6edf3; }
@@ -23,10 +23,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Global Heatmap & Innovation Smart Money Radar (All Sectors)")
-st.markdown("เรดาร์สแกนกระแสเงินทุน Smart Money ครบทุก Sector Heatmap, Smart Grid, Gold และ Bitcoin พร้อมระบบกรองสเกลกราฟให้มองเห็นง่ายชัดเจน และบทวิเคราะห์เจาะลึกงบ/สิทธิบัตร")
+st.title("⚡ Global Heatmap & Smart Money Sector Radar")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors Heatmap** ครบทุกกลุ่ม พร้อมปุ่มเปิด/ปิดเส้นกราฟอิสระ และบทวิเคราะห์เจาะลึกเฉพาะ Sector ขาขึ้นตัวจริงที่มีของ")
 
-# --- รวบรวมทุก Sector ทั้งหมดตาม Heatmap ดั้งเดิมและสินทรัพย์พิเศษตามที่มึงต้องการ ---
+# --- รวบรวมทุก Sector ทั้งหมดตาม Heatmap ดั้งเดิมและสินทรัพย์พิเศษ ---
 radar_assets = {
     "Technology (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
@@ -53,7 +53,6 @@ def fetch_all_sectors_flow(assets_dict):
             if 'Volume' in df.columns:
                 vol_sma = df['Volume'].rolling(window=20).mean()
                 vol_change = ((df['Volume'] - vol_sma) / vol_sma) * 100
-                # ตัด Outlier ป้องกันสเกลพัง
                 vol_change = vol_change.clip(lower=-80, upper=300)
                 volume_frames[name] = vol_change
             else:
@@ -63,10 +62,27 @@ def fetch_all_sectors_flow(assets_dict):
     df_vol = df_vol.ffill().bfill()
     return df_vol
 
-with st.spinner("กำลังประมวลผลข้อมูล All Sectors Heatmap และกระแส Smart Money..."):
+with st.spinner("กำลังประมวลผลข้อมูล All Sectors Heatmap..."):
     df_flow = fetch_all_sectors_flow(radar_assets)
 
 if not df_flow.empty:
+    # --- ฟีเจอร์ปุ่มกดเปิด/ปิดเส้นกราฟทุก Sector แบบเลือกได้อิสระ ---
+    st.markdown("### 🎛️ ปุ่มควบคุมการแสดงผลเส้นกราฟ (Toggle Sectors)")
+    
+    # แบ่งเป็นแถวละ 4 ปุ่มเพื่อให้กดง่ายไม่แน่นเกินไป
+    keys = list(radar_assets.keys())
+    row1 = keys[:4]
+    row2 = keys[4:8]
+    row3 = keys[8:]
+    
+    selected_sectors = {}
+    
+    for row in [row1, row2, row3]:
+        cols = st.columns(len(row))
+        for i, col_name in enumerate(row):
+            with cols[i]:
+                selected_sectors[col_name] = st.checkbox(col_name, value=True)
+
     last_date = df_flow.index[-1]
     first_date = df_flow.index[0]
     total_days = (last_date - first_date).days
@@ -77,22 +93,25 @@ if not df_flow.empty:
     fig = go.Figure()
 
     for col in df_flow.columns:
+        is_visible = True if selected_sectors.get(col, True) else 'legendonly'
+        
         fig.add_trace(go.Scatter(
             x=df_flow.index, 
             y=df_flow[col], 
             mode='lines',
             line=dict(width=1.8),
             name=col,
+            visible=is_visible,
             connectgaps=True
         ))
 
     fig.update_layout(
         template="plotly_dark",
-        title="All Sectors Heatmap & Assets % Volume Change Flow (Clean View)",
+        title="All Sectors Heatmap & Assets % Volume Change Flow",
         xaxis_title="วันที่",
         yaxis_title="% Volume Change (vs 20D MA)",
         xaxis=dict(range=[first_date, max_x_limit]),
-        yaxis=dict(range=[-60, 250]), # ล็อกกรอบแกน Y ให้มองเห็นเส้นทุก Sector ชัดเจน ไม่แบนราบ
+        yaxis=dict(range=[-60, 250]),
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -106,39 +125,34 @@ if not df_flow.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของทุก Sector")
-    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_width=True)
+    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_version=True)
 
-    # --- ส่วนบทวิเคราะห์เจาะลึกครบทุกกลุ่มแบบจัดเต็ม ---
+    # --- ส่วนบทวิเคราะห์: คัดเฉพาะ Sector ขาขึ้นตัวจริงที่มีของ มาชำแหละให้เห็นจะๆ ---
     st.markdown("""
     <div class="analysis-box">
-    <h2>🧬 บทวิเคราะห์เจาะลึก All Sectors Heatmap, สิทธิบัตร และสมาร์ทมันนี่</h2>
-    <p><i>วิเคราะห์งบการเงิน สิทธิบัตร (Patent Moat) และรอบการหมุนเวียนของเงินทุนในทุก Sector เพื่อให้มึงตามเจ้ามือทันทุกจังหวะ</i></p>
+    <h2>🧬 บทวิเคราะห์เจาะลึก: คัดหัวกะทิเฉพาะ Sector ขาขึ้นที่มี "ของจริง"</h2>
+    <p><i>จากภาพรวม All Sectors ด้านบน กูคัดเฉพาะกลุ่มที่สมาร์ทมันนี่กำลังทุ่มเงินเข้าจริง งบแกร่ง และมีสิทธิบัตร (Patent Moat) คุ้มครอง มาชำแหละตัวเด็ดให้มึงลุย</i></p>
     <hr style="border-color: #30363d;">
     
-    ### 🔥 1. กลุ่ม Semiconductors & Patent Moat (SMH / XLK)
-    * **วิเคราะห์งบและสิทธิบัตร:** Gross Margin สูงระดับ 60-80% มีสิทธิบัตรคุ้มครองสถาปัตยกรรมชิปและเครื่องพิมพ์ EUV ลิขสิทธิ์เฉพาะตัว สมาร์ทมันนี่ชอบสะสมช่วงหุ้นซบเซาก่อนระเบิดรับรอบ AI
-    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `NVDA (Nvidia)` — เจ้าตลาดฮาร์ดแวร์ AI วอลุ่มเข้าแน่น
-    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `ASML (ASML Holding)` — ผูกขาดเครื่องพิมพ์ EUV รายเดียวในโลก งบแกร่งสุด
+    ### 🔥 1. กลุ่ม Semiconductors & Patent Moat (SMH) — ขาขึ้นตัวจริงสาย Deep Tech
+    * **วิเคราะห์งบและสิทธิบัตร:** Gross Margin ยืนระยะสูงปรี๊ด 60-80% มีสิทธิบัตรสถาปัตยกรรมชิปและเครื่องพิมพ์ EUV ที่ไม่มีใครลอกเลียนแบบได้ เป็นหัวใจหลักของยุค AI Infrastructure
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `NVDA (Nvidia)` — เจ้าตลาดฮาร์ดแวร์ประมวลผล AI วอลุ่มเข้าสะสมหนาแน่นรอบใหญ่
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `ASML (ASML Holding)` — ผูกขาดเครื่องพิมพ์เวเฟอร์ระดับนาโน รายได้มั่นคงจากแบ็กล็อกข้ามปี
 
-    ### ⚡ 2. กลุ่ม Industrials & Smart Grid (XLI)
-    * **วิเคราะห์งบและสิทธิบัตร:** งบโตต่อเนื่องจาก Backlog สั่งซื้อล่วงหน้า สิทธิบัตรระบบส่งกำลังไฟฟ้าแรงดันสูงและซอฟต์แวร์กริดอัจฉริยะ รองรับการบูมของ Data Center
-    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `GE Vernova (GEV)` — กังหันก๊าซและโครงสร้างพื้นฐานกริด ยอดจองพุ่ง
-    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Eaton Corp (ETN)` — เบอร์หนึ่งเรื่องหม้อแปลงและสวิตช์เกียร์อัจฉริยะ
+    ### ⚡ 2. กลุ่ม Industrials & Smart Grid (XLI) — ขาขึ้นจากวิกฤตพลังงานและ Data Center
+    * **วิเคราะห์งบและสิทธิบัตร:** งบโตแบบก้าวกระโดดตามคำสั่งซื้อ (Backlog) ระบบส่งไฟฟ้าและกริดอัจฉริยะที่รองรับการแห่สร้าง Data Center ทั่วโลก สิทธิบัตรด้านวิศวกรรมไฟฟ้าแรงสูงคือเกราะคุ้มกันชั้นดี
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `GE Vernova (GEV)` — กังหันก๊าซและกริดไฟฟ้า ยอดจองล้นทะลัก วอลุ่มพุ่งแรง
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Eaton Corp (ETN)` — ผู้นำสวิตช์เกียร์และหม้อแปลงไฟฟ้าอัจฉริยะ งบการเงินนิ่งและแข็งแกร่งมาก
 
-    ### 🔋 3. กลุ่ม Energy & Clean Tech (XLE)
-    * **วิเคราะห์งบและสิทธิบัตร:** เร่งลงทุน R&D ระบบกักเก็บพลังงาน (BESS) และเซลล์เชื้อเพลิง สิทธิบัตรเคมีแบตเตอรี่คือเกราะคุ้มกันชั้นดี
-    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bloom Energy (BE)` — เซลล์เชื้อเพลิงผลิตไฟฟ้านอกกริดป้อน Data Center
-    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Fluence Energy (FLNC)` — ผู้นำระบบ BESS ระดับโลก มีซอฟต์แวร์ควบคุมกริดลิขสิทธิ์
+    ### 🔋 3. กลุ่ม Energy & Clean Tech (XLE) — ขาขึ้นจากนวัตกรรมกักเก็บพลังงาน (BESS)
+    * **วิเคราะห์งบและสิทธิบัตร:** งบเร่งตัวจากการลงทุนระบบกักเก็บพลังงานและเซลล์เชื้อเพลิงป้อนโรงไฟฟ้า สิทธิบัตรเคมีแบตเตอรี่เฉพาะตัวทำให้ได้งานโปรเจกต์ใหญ่ระดับเมกะโปรเจกต์
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bloom Energy (BE)` — ผู้นำเซลล์เชื้อเพลิงผลิตไฟฟ้านอกกริด วอลุ่มเหวี่ยงทำกำไรดีเยี่ยม
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `Fluence Energy (FLNC)` — เบอร์ใหญ่ระบบ BESS โลก มีซอฟต์แวร์ควบคุมกริดลิขสิทธิ์
 
-    ### 🧪 4. กลุ่ม Healthcare, Advanced Materials & Others (XLV / XLB / XLF / XLU / XLP / XLY)
-    * **วิเคราะห์งบและสิทธิบัตร:** กลุ่มป้องกันความเสี่ยงและเติบโตตามวัฏจักรเศรษฐกิจ สิทธิบัตรยาเฉพาะทาง (เช่น Eli Lilly) ทำกำไรมหาศาล ขณะที่กลุ่มธนาคารและอุปโภคบริโภคมองกระแสเงินสดปันผล
-    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Eli Lilly (LLY)` / `MP Materials (MP)` — หุ้นนวัตกรรมยาและแร่หายากที่ทุนใหญ่ชอบเข้า
-    * 💎 **ของดีพรีเมียม (Core Patent Moat):** หุ้นกลุ่ม Defensive ที่งบการเงินนิ่งและมีกระแสเงินสดสม่ำเสมอ
-
-    ### 💰 5. กลุ่ม Bitcoin (BTC-USD) & Gold (GC=F)
-    * **วิเคราะห์งบและสิทธิบัตร:** วัดกันที่สภาพคล่องมหภาค (Global Liquidity) และกระแสเงินสดสำรองปลอดภัย
-    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bitcoin (BTC)` — สินทรัพย์ดูดสภาพคล่องไวและรุนแรงที่สุด
-    * 💎 **ของดีพรีเมียม (Core Safe Haven):** `Gold (GC=F)` — สินทรัพย์ปลอดภัยดั้งเดิม เสถียรสูงสุด
+    ### 💰 4. กลุ่ม Bitcoin (BTC-USD) & Gold (GC=F) — ขาขึ้นจากสภาพคล่องมหภาค
+    * **วิเคราะห์งบและสิทธิบัตร:** ไม่มีงบการเงินบริษัท แต่วัดกันที่สภาพคล่องโลก (Global Liquidity) และกระแสเงินสำรองปลอดภัย
+    * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `Bitcoin (BTC)` — สินทรัพย์ดูดสภาพคล่องไวและรุนแรงที่สุดเมื่อตลาดเปิดรับความเสี่ยง
+    * 💎 **ของดีพรีเมียม (Core Safe Haven):** `Gold (GC=F)` — สินทรัพย์ปลอดภัยดั้งเดิม เสถียรและป้องกันความเสี่ยงระดับมหภาคได้ยอดเยี่ยม
     </div>
     """, unsafe_allow_html=True)
 
