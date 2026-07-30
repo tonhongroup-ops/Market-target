@@ -69,7 +69,6 @@ if not df_flow.empty:
     # --- ฟีเจอร์ปุ่มกดเปิด/ปิดเส้นกราฟทุก Sector แบบเลือกได้อิสระ ---
     st.markdown("### 🎛️ ปุ่มควบคุมการแสดงผลเส้นกราฟ (Toggle Sectors)")
     
-    # แบ่งเป็นแถวละ 4 ปุ่มเพื่อให้กดง่ายไม่แน่นเกินไป
     keys = list(radar_assets.keys())
     row1 = keys[:4]
     row2 = keys[4:8]
@@ -125,7 +124,8 @@ if not df_flow.empty:
     st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("### 📋 ตารางสรุป % Volume Change ล่าสุดของทุก Sector")
-    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_version=True)
+    # แก้ไขจุดที่พังโดยเอาพารามิเตอร์เกินออก เหลือแค่ use_container_width=True ตามมาตรฐาน Streamlit
+    st.dataframe(df_flow.tail(1).T.rename(columns={df_flow.index[-1]: "% Volume Change (Latest)"}), use_container_width=True)
 
     # --- ส่วนบทวิเคราะห์: คัดเฉพาะ Sector ขาขึ้นตัวจริงที่มีของ มาชำแหละให้เห็นจะๆ ---
     st.markdown("""
@@ -137,7 +137,7 @@ if not df_flow.empty:
     ### 🔥 1. กลุ่ม Semiconductors & Patent Moat (SMH) — ขาขึ้นตัวจริงสาย Deep Tech
     * **วิเคราะห์งบและสิทธิบัตร:** Gross Margin ยืนระยะสูงปรี๊ด 60-80% มีสิทธิบัตรสถาปัตยกรรมชิปและเครื่องพิมพ์ EUV ที่ไม่มีใครลอกเลียนแบบได้ เป็นหัวใจหลักของยุค AI Infrastructure
     * 🚀 **ตัวเต็งกระชากพอร์ต (High Beta):** `NVDA (Nvidia)` — เจ้าตลาดฮาร์ดแวร์ประมวลผล AI วอลุ่มเข้าสะสมหนาแน่นรอบใหญ่
-    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `ASML (ASML Holding)` — ผูกขาดเครื่องพิมพ์เวเฟอร์ระดับนาโน รายได้มั่นคงจากแบ็กล็อกข้ามปี
+    * 💎 **ของดีพรีเมียม (Core Patent Moat):** `ASML (ASML Holding)` — ผูกขาดเครื่องพิมพ์ EUV รายเดียวในโลก รายได้มั่นคงจากแบ็กล็อกข้ามปี
 
     ### ⚡ 2. กลุ่ม Industrials & Smart Grid (XLI) — ขาขึ้นจากวิกฤตพลังงานและ Data Center
     * **วิเคราะห์งบและสิทธิบัตร:** งบโตแบบก้าวกระโดดตามคำสั่งซื้อ (Backlog) ระบบส่งไฟฟ้าและกริดอัจฉริยะที่รองรับการแห่สร้าง Data Center ทั่วโลก สิทธิบัตรด้านวิศวกรรมไฟฟ้าแรงสูงคือเกราะคุ้มกันชั้นดี
