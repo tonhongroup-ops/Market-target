@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🌍 Global Macro Money Flow Radar")
-st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (ย้อนหลัง 2 ปี | สเกลเทียบจุดเริ่มต้น 0%)")
+st.markdown("เรดาร์ภาพใหญ่กระแสเงินทุนเคลื่อนย้ายของโลก (ย้อนหลัง 2 ปี | สเกลเทียบจุดเริ่มต้น 0% | เส้นทึบเต็มตา)")
 
 # --- กำหนดเฉพาะสินทรัพย์ภาพใหญ่ ---
 macro_assets = {
@@ -37,7 +37,7 @@ macro_assets = {
     "Global Bond (TLT)": "TLT"
 }
 
-# ล็อกเวลาไว้ที่ 2 ปีล่าสุดตามที่มึงต้องการ
+# ล็อกเวลาไว้ที่ 2 ปีล่าสุด
 time_period = "2y"
 
 @st.cache_data(ttl=3600)
@@ -56,12 +56,11 @@ with st.spinner("กำลังดึงข้อมูลภาพใหญ่
     df_macro = fetch_macro_flow(macro_assets, time_period)
 
 if not df_macro.empty:
-    # คำนวณวันล่าสุดในข้อมูล เพื่อเอามาทำขอบขวาเผื่อที่ว่าง 15%
+    # คำนวณวันล่าสุด เพื่อทำขอบขวาเผื่อพื้นที่ว่าง 15%
     last_date = df_macro.index[-1]
     first_date = df_macro.index[0]
     total_days = (last_date - first_date).days
     
-    # เพิ่มระยะเวลาไปข้างหน้าอีกประมาณ 15% ของช่วงเวลาทั้งหมด เพื่อให้ฝั่งขวามีช่องว่างหายใจ
     padding_days = int(total_days * 0.15)
     max_x_limit = last_date + timedelta(days=padding_days)
 
@@ -71,25 +70,26 @@ if not df_macro.empty:
         fig.add_trace(go.Scatter(
             x=df_macro.index, 
             y=df_macro[col], 
-            mode='lines', 
+            mode='lines',            # โหมดเส้นตรง
+            line=dict(width=2),      # บังคับเป็นเส้นทึบหนาพอดีตา ไม่มีประ
             name=col,
-            hovertemplate='%{y:.2f}%<extra></extra>' # แสดงแค่ตัวเลข % คลีนๆ
+            hovertemplate='%{y:.2f}%<extra></extra>'
         ))
 
-    # เซ็ตค่าให้แกน X เผื่อพื้นที่ว่างด้านขวา และจัดวาง Legend ไว้ข้างล่าง
+    # เซ็ตค่าแกน X เผื่อพื้นที่ว่าง 15% และวาง Legend ไว้ใต้กราฟแบบเส้นทึบ
     fig.update_layout(
         template="plotly_dark",
-        title="Macro Asset Flow Comparison (2-Year View with Right Padding)",
+        title="Macro Asset Flow Comparison (2-Year View, Solid Lines)",
         xaxis_title="วันที่",
         yaxis_title="ผลตอบแทนสะสม (%)",
         hovermode="x unified",
         xaxis=dict(
-            range=[first_date, max_x_limit] # บังคับขอบเขตแกน X ให้มีพื้นที่ว่างทางขวา 15%
+            range=[first_date, max_x_limit]
         ),
         legend=dict(
             orientation="h",
             yanchor="top",
-            y=-0.25,                  # ดัน Legend ลงมาไว้ใต้กราฟ
+            y=-0.25,
             xanchor="center",
             x=0.5
         ),
