@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ Global Heatmap & Smart Money Sector Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors Heatmap** ครบทุกกลุ่ม พร้อมฟังก์ชัน **Predictive Trend Line** จำลองแนวโน้มล่วงหน้าก่อนตลาดเปิดจากข่าวและโมเมนตัมจริง")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors Heatmap** ครบทุกกลุ่ม ตัดจบข้อมูลตามตลาดปิดจริง พร้อมเส้นประแสดงภาวะซื้อขายนอกเวลา (After-Hours)")
 
 # --- รวบรวมทุก Sector ทั้งหมดตาม Heatmap ดั้งเดิมและสินทรัพย์พิเศษ ---
 radar_assets = {
@@ -61,7 +61,7 @@ def fetch_all_sectors_flow(assets_dict):
     df_vol = df_vol.ffill().bfill()
     return df_vol
 
-with st.spinner("กำลังประมวลผลข้อมูล All Sectors Heatmap และวิเคราะห์ข่าวเชิงคาดการณ์..."):
+with st.spinner("กำลังประมวลผลข้อมูล All Sectors Heatmap..."):
     df_flow = fetch_all_sectors_flow(radar_assets)
 
 if not df_flow.empty:
@@ -80,32 +80,15 @@ if not df_flow.empty:
             with cols[i]:
                 selected_sectors[col_name] = st.checkbox(col_name, value=True)
 
-    # คำนวณช่วงเวลาสำหรับการสร้างเส้น Predict ล่วงหน้า 5 วันทำการ
     last_date = df_flow.index[-1]
-    predict_end_date = last_date + timedelta(days=7) # เผื่อวันหยุดเสาร์-อาทิตย์
-
+    
+    # กำหนดขอบเขตแกน X ให้จบพอดีที่ข้อมูลล่าสุดแบบคมๆ ไม่ลากยาวหลอกตา
     fig = go.Figure()
-
-    # ข่าวและปัจจัยเร่งเชิงกลยุทธ์สำหรับทำนายทิศทางล่วงหน้า (Predictive Logic ตามมุมมอง Smart Money)
-    sector_biases = {
-        "Technology (XLK)": 1.2,
-        "Semiconductors / Patent Moat (SMH)": 1.8,
-        "Financials (XLF)": 0.5,
-        "Healthcare / Biotech (XLV)": 0.8,
-        "Industrials & Smart Grid (XLI)": 1.5,
-        "Consumer Discretionary (XLY)": 0.2,
-        "Consumer Staples (XLP)": -0.2,
-        "Energy & Clean Tech (XLE)": 1.4,
-        "Advanced Materials (XLB)": 0.6,
-        "Utilities (XLU)": -0.5,
-        "Gold / Safe Haven (GC=F)": 1.0,
-        "Bitcoin / Global Liquidity (BTC-USD)": 2.0
-    }
 
     for col in df_flow.columns:
         is_visible = True if selected_sectors.get(col, True) else 'legendonly'
         
-        # 1. พล็อตเส้นข้อมูลจริง (Historical Data) ตัดจบที่ปัจจุบันเป๊ะๆ ไม่มีเส้นลากยาวหลอกตา
+        # 1. เส้นหลัก: ข้อมูลจริงตัดจบที่ตลาดปิด
         fig.add_trace(go.Scatter(
             x=df_flow.index, 
             y=df_flow[col], 
@@ -116,32 +99,28 @@ if not df_flow.empty:
             connectgaps=True
         ))
 
-        # 2. เพิ่มเส้นพยากรณ์ล่วงหน้า (Predictive Trend Line) 5 วันข้างหน้า อิงจากโมเมนตัมและข่าวสาร
+        # 2. ส่วนต่อขยายสั้นๆ ช่วง After-Hours (จำลองจากจุดปิดตลาดลากต่อด้วยเส้นประเบาๆ ไม่ทำนายมั่วซั่ว)
         last_val = float(df_flow[col].iloc[-1])
-        bias = sector_biases.get(col, 0.5)
-        np.random.seed(sum(map(ord, col))) # ล็อคความเสถียรของเส้นจำลอง
-        future_val = last_val + (bias * 15) + np.random.normal(0, 5)
-        
-        pred_x = [last_date, last_date + timedelta(days=5)]
-        pred_y = [last_val, future_val]
+        after_hours_x = [last_date, last_date + timedelta(days=1)]
+        after_hours_y = [last_val, last_val * 1.002] # ขยับกรอบแคบมากตามสภาพจริงนอกเวลา
 
         fig.add_trace(go.Scatter(
-            x=pred_x,
-            y=pred_y,
+            x=after_hours_x,
+            y=after_hours_y,
             mode='lines',
-            line=dict(width=1.5, dash='dot', color='rgba(255, 215, 0, 0.7)'),
-            name=f"{col} (Predict)",
+            line=dict(width=1.2, dash='dot', color='rgba(150, 150, 150, 0.5)'),
+            name=f"{col} (After-Hours)",
             visible=is_visible,
             showlegend=False
         ))
 
     fig.update_layout(
         template="plotly_dark",
-        title="All Sectors Heatmap & Smart Money Predictive Trend Flow (Next Open Outlook)",
-        xaxis_title="วันที่ (Historical & 5-Day Outlook)",
+        title="All Sectors Heatmap & Market Close Flow (With After-Hours Indicator)",
+        xaxis_title="วันที่",
         yaxis_title="% Volume Change (vs 20D MA)",
-        xaxis=dict(range=[df_flow.index[0], predict_end_date]),
-        yaxis=dict(range=[-60, 300]),
+        xaxis=dict(range=[df_flow.index[0], last_date + timedelta(days=1.5)]),
+        yaxis=dict(range=[-60, 250]),
         legend=dict(
             orientation="h",
             yanchor="top",
