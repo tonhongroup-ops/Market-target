@@ -23,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ Global Heatmap & Smart Money Sector Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors Heatmap** ครบทุกกลุ่ม ตัดจบข้อมูลตามตลาดปิดจริง พร้อมเส้นประแสดงภาวะซื้อขายนอกเวลา (After-Hours)")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors Heatmap** ครบทุกกลุ่ม ตัดจบเส้นกราฟตามตลาดปิดจริงล่าสุดแบบเป๊ะๆ ไม่มีเส้นเกิน")
 
 # --- รวบรวมทุก Sector ทั้งหมดตาม Heatmap ดั้งเดิมและสินทรัพย์พิเศษ ---
 radar_assets = {
@@ -82,13 +82,12 @@ if not df_flow.empty:
 
     last_date = df_flow.index[-1]
     
-    # กำหนดขอบเขตแกน X ให้จบพอดีที่ข้อมูลล่าสุดแบบคมๆ ไม่ลากยาวหลอกตา
     fig = go.Figure()
 
     for col in df_flow.columns:
         is_visible = True if selected_sectors.get(col, True) else 'legendonly'
         
-        # 1. เส้นหลัก: ข้อมูลจริงตัดจบที่ตลาดปิด
+        # พล็อตเส้นข้อมูลจริง และตัดจบหยุดที่วันล่าสุดที่มีข้อมูล (ตลาดปิดจริง) เท่านั้น
         fig.add_trace(go.Scatter(
             x=df_flow.index, 
             y=df_flow[col], 
@@ -99,27 +98,12 @@ if not df_flow.empty:
             connectgaps=True
         ))
 
-        # 2. ส่วนต่อขยายสั้นๆ ช่วง After-Hours (จำลองจากจุดปิดตลาดลากต่อด้วยเส้นประเบาๆ ไม่ทำนายมั่วซั่ว)
-        last_val = float(df_flow[col].iloc[-1])
-        after_hours_x = [last_date, last_date + timedelta(days=1)]
-        after_hours_y = [last_val, last_val * 1.002] # ขยับกรอบแคบมากตามสภาพจริงนอกเวลา
-
-        fig.add_trace(go.Scatter(
-            x=after_hours_x,
-            y=after_hours_y,
-            mode='lines',
-            line=dict(width=1.2, dash='dot', color='rgba(150, 150, 150, 0.5)'),
-            name=f"{col} (After-Hours)",
-            visible=is_visible,
-            showlegend=False
-        ))
-
     fig.update_layout(
         template="plotly_dark",
-        title="All Sectors Heatmap & Market Close Flow (With After-Hours Indicator)",
+        title="All Sectors Heatmap & Market Close Flow (Clean & Exact Close)",
         xaxis_title="วันที่",
         yaxis_title="% Volume Change (vs 20D MA)",
-        xaxis=dict(range=[df_flow.index[0], last_date + timedelta(days=1.5)]),
+        xaxis=dict(range=[df_flow.index[0], last_date]),  # ล็อคขอบขวาให้หยุดที่วันล่าสุดพอดีเป๊ะ
         yaxis=dict(range=[-60, 250]),
         legend=dict(
             orientation="h",
