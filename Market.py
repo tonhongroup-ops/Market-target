@@ -25,6 +25,15 @@ st.markdown("""
 st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
 st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors & Innovation Flow** พร้อมบทวิเคราะห์เจาะลึกสิทธิบัตร รอบข่าวสาร และเกมการเงินจากเพื่อนคู่คิดของคุณ")
 
+# --- Sidebar สำหรับปรับแต่ง Timeframe ---
+st.sidebar.markdown("### ⚙️ ตั้งค่าเรดาร์ (Radar Settings)")
+timeframe_option = st.sidebar.selectbox(
+    "เลือกช่วงเวลาของกราฟ (Timeframe):",
+    options=["1mo", "3mo", "6mo", "1y"],
+    index=2, # ค่าเริ่มต้นที่ 6 เดือน
+    format_func=lambda x: {"1mo": "1 เดือน", "3mo": "3 เดือน", "6mo": "6 เดือน", "1y": "1 ปี"}[x]
+)
+
 # --- รวบรวมทุก Sector และสินทรัพย์พิเศษ ---
 radar_assets = {
     "Technology & AI (XLK)": "XLK",
@@ -42,24 +51,24 @@ radar_assets = {
 }
 
 @st.cache_data(ttl=3600)
-def fetch_multi_period_volume_flow(assets_dict):
+def fetch_multi_period_volume_flow(assets_dict, period_str):
     table_data = []
     chart_raw_data = {}
     
     for name, symbol in assets_dict.items():
         try:
-            # ดึงข้อมูลย้อนหลัง 6 เดือน
-            df = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
+            # ดึงข้อมูลตาม Timeframe ที่เลือก
+            df = yf.download(symbol, period=period_str, auto_adjust=True, progress=False)
             if not df.empty:
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.droplevel(1)
                 
                 if 'Volume' in df.columns:
                     vol = df['Volume'].dropna()
-                    if len(vol) >= 70:
+                    if len(vol) >= 25:
                         vol_sma20 = vol.rolling(window=20).mean()
-                        vol_sma40 = vol.rolling(window=40).mean() # 2 เดือน
-                        vol_sma60 = vol.rolling(window=60).mean() # 3 เดือน
+                        vol_sma40 = vol.rolling(window=40).mean() if len(vol) >= 40 else vol_sma20 # 2 เดือน
+                        vol_sma60 = vol.rolling(window=60).mean() if len(vol) >= 60 else vol_sma20 # 3 เดือน
                         
                         v_latest = float(((vol.iloc[-1] - vol_sma20.iloc[-1]) / vol_sma20.iloc[-1]) * 100)
                         v_3d = float(((vol.iloc[-3:].mean() - vol_sma20.iloc[-3:].mean()) / vol_sma20.iloc[-3:].mean()) * 100)
@@ -80,62 +89,61 @@ def fetch_multi_period_volume_flow(assets_dict):
                             "3 Months (%)": round(v_3m, 2)
                         })
                         
-                        # เก็บข้อมูลราคาปิดไว้สำหรับทำกราฟแนวโน้ม Sector
+                        # เก็บข้อมูลราคาปิดไว้สำหรับทำกราฟรวมทุก Sector
                         if 'Close' in df.columns:
-                            chart_raw_data[name] = df['Close'].tail(60)
+                            close_series = df['Close']
+                            if isinstance(close_series, pd.DataFrame):
+                                close_series = close_series.iloc[:, 0]
+                            # Normalize ให้เริ่มต้นที่ 100 เพื่อเทียบการเติบโตพร้อมกัน
+                            normalized = (close_series / close_series.iloc[0]) * 100
+                            chart_raw_data[name] = normalized
         except Exception as e:
             continue
             
-    return pd.DataFrame(table_data), chart_raw_data
+    return pd.DataFrame(table_data), pd.DataFrame(chart_raw_data)
 
-# รันฟังก์ชันดึงข้อมูล
-with st.spinner('กำลังเชื่อมต่อฐานข้อมูลตลาดและประมวลผลกระแสเงินทุน...'):
-    df_result, chart_data = fetch_multi_period_volume_flow(radar_assets)
+# รันฟังก์ชันดึงข้อมูลตาม Timeframe ที่เลือก
+with st.spinner(f'กำลังดึงข้อมูลตลาดและประมวลผลเรดาร์ (Timeframe: {timeframe_option})...'):
+    df_result, df_chart = fetch_multi_period_volume_flow(radar_assets, timeframe_option)
 
-st.markdown("### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา (เทียบกับค่าเฉลี่ยปกติ)")
+st.markdown(f"### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา (Timeframe: {timeframe_option})")
 if not df_result.empty:
     st.dataframe(df_result, use_container_width=True, hide_index=True)
     
-    # --- กราฟแสดงแนวโน้มราคา Sector ที่มึงถามหาว่าหายไปไหน! ---
+    # --- กราฟรวมทุก Sector พร้อมกัน (Multi-Sector Normalized Chart) ---
     st.markdown("---")
-    st.markdown("### 📈 กราฟแนวโน้มราคา Sector ย้อนหลัง (Trend & Price Action)")
-    if chart_data:
-        selected_sector_chart = st.selectbox("เลือก Sector หรือสินทรัพย์เพื่อดูเส้นทางราคา (Normalized Close 60 Days):", list(chart_data.keys()))
-        if selected_sector_chart in chart_data:
-            # Normalize ราคาให้เริ่มที่ 100 เพื่อเทียบสัดส่วนการเติบโต
-            raw_series = chart_data[selected_sector_chart]
-            if isinstance(raw_series, pd.DataFrame):
-                raw_series = raw_series.iloc[:, 0]
-            normalized_df = (raw_series / raw_series.iloc[0]) * 100
-            st.line_chart(normalized_df)
+    st.markdown("### 📈 กราฟเปรียบเทียบทิศทางราคา 'ทุก Sector พร้อมกัน' (Normalized Growth Comparison)")
+    st.markdown("💡 *กราฟนี้ปรับฐานราคาเริ่มต้นที่ 100 เพื่อให้เห็นชัดๆ ว่า Sector ไหนพุ่งแรงหรือร่วงหนักกว่ากันในช่วงเวลาที่เลือก*")
     
-    # --- ส่วนวิเคราะห์เชิงลึกสไตล์เพื่อนรักนักลงทุน & แนะนำหุ้นที่มีนัยสำคัญ ---
+    if not df_chart.empty:
+        st.line_chart(df_chart, use_container_width=True, height=500)
+    
+    # --- ส่วนวิเคราะห์เชิงลึกสไตล์เพื่อนรักนักลงทุน & หุ้นมีนัยสำคัญ ---
     st.markdown("---")
     st.markdown("### 🧠 มุมมองวิเคราะห์เกมทุน สิทธิบัตร และรอบข่าวสาร (AI & Smart Money Insights)")
     
-    # ค้นหา Sector ที่เงินกำลังไหลเข้าแรงสุดในรอบ 1 เดือนหรือล่าสุด
     st.markdown("""
     <div class="analysis-box">
     <h4>🔥 วิเคราะห์กระแสเงินทุน (Money Flow Momentum) & หุ้นไฮไลท์ราย Sector:</h4>
-    <p>จากการสแกนโครงสร้างวอลุ่มทั้งระยะสั้น (Latest/3Days) และระยะกลาง (2-3 Months) พบจุดสะสมของสมาร์ตมันนี่ในกลุ่มนวัตกรรมและโครงสร้างพื้นฐานสำคัญ ดังนี้ครับเพื่อน:</p>
+    <p>จากกราฟรวมกระดานและตัวเลข % Volume Change ย้อนหลัง ทำให้เราเห็นการหมุนเวียนของเม็ดเงิน (Sector Rotation) ชัดเจนขึ้น ดังนี้ครับเพื่อน:</p>
     
     <div class="stock-pick-box">
         <b>1. กลุ่ม Semiconductors / Patent Moat (SMH) & Tech AI (XLK):</b><br>
-        <i>นัยสำคัญทางเทค & สิทธิบัตร:</i> เป็นหัวใจของการจดสิทธิบัตรชิปประมวลผล AI และสถาปัตยกรรมคลาวด์ หาก % Volume Change ในช่วง 2-3 เดือนเริ่มฟื้นตัวจากจุดซึม แปลว่าเม็ดเงินกำลังตั้งหลักรอบใหม่รับสินค้า Hi-Season<br>
+        <i>นัยสำคัญทางเทค & สิทธิบัตร:</i> สมรภูมิการจดสิทธิบัตรชิปประมวลผล AI และสถาปัตยกรรมคลาวด์ หากเส้นกราฟของ SMH ฉีกตัวขึ้นเหนือ Sector อื่น แปลว่าสมาร์ตมันนี่กำลังเก็งกำไรนวัตกรรมรอบใหม่<br>
         <b>🎯 หุ้นแนะนำมีนัยสำคัญ:</b> 
         <ul>
-            <li><b>NVDA (NVIDIA):</b> เจ้าพ่อสิทธิบัตรชิป AI และโครงสร้างพื้นฐาน Data Center โลก</li>
-            <li><b>TSM (TSMC):</b> โรงหล่อชิปผูกขาดเทคโนโลยีขั้นสูง Patent Moat แน่นหนาที่สุด</li>
+            <li><b>NVDA (NVIDIA):</b> เจ้าพ่อสิทธิบัตรชิปประมวลผล AI และระบบโครงสร้างพื้นฐานระดับโลก</li>
+            <li><b>TSM (TSMC):</b> โรงหล่อชิปผูกขาดนวัตกรรมระดับโลก Patent Moat แกร่งที่สุดในอุตสาหกรรม</li>
             <li><i>ฝั่งไทย:</i> <b>DELTA</b> (ตัวแทนฮาร์ดแวร์นวัตกรรมและระบบจัดการพลังงาน AI ใน SET100)</li>
         </ul>
     </div>
 
     <div class="stock-pick-box" style="border-left-color: #335dff;">
-        <b>2. กลุ่ม Industrials & Smart Grid (XLI) / Energy Tech (XLE):</b><br>
-        <i>นัยสำคัญทางเทค & สิทธิบัตร:</i> เมกะเทรนด์การเปลี่ยนผ่านพลังงาน (Energy Transition) และระบบโครงข่ายไฟฟ้าอัจฉริยะ (Smart Grid) ที่ต้องอาศัยนวัตกรรมการบริหารพลังงานสะอาด<br>
+        <b>2. กลุ่ม Industrials & Smart Grid (XLI) / Clean Tech (XLE):</b><br>
+        <i>นัยสำคัญทางเทค & สิทธิบัตร:</i> การเปลี่ยนผ่านด้านพลังงาน (Energy Transition) และโครงข่ายไฟฟ้าอัจฉริยะที่ขับเคลื่อนด้วยซอฟต์แวร์และสิทธิบัตรการจัดการพลังงาน<br>
         <b>🎯 หุ้นแนะนำมีนัยสำคัญ:</b>
         <ul>
-            <li><b>NEE (NextEra Energy):</b> ผู้นำนวัตกรรมพลังงานหมุนเวียนและโครงข่ายอัจฉริยะระดับโลก</li>
+            <li><b>NEE (NextEra Energy):</b> ผู้นำนวัตกรรมพลังงานหมุนเวียนและโครงข่ายไฟฟ้าอัจฉริยะ</li>
             <li><i>ฝั่งไทย:</i> <b>GULF</b> (การขยายอาณาจักรสู่ Digital Infrastructure, Data Center และ Smart Energy เต็มตัว)</li>
         </ul>
     </div>
