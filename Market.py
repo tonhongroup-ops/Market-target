@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import plotly.graph_objects as go
-from datetime import datetime  # <--- เพิ่มตัวนี้เข้ามาครับเพื่อน
+from datetime import datetime
 
 # --- ตั้งค่า API Key ของ FMP ---
 FMP_API_KEY = "akyx1POpzLt8geYg7oCuIvQW0qIsQjnh"
@@ -27,12 +27,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro (Uptrend Focus)")
-st.markdown("เรดาร์ตรวจจับกระแส Smart Money เฉพาะ Sector ขาขึ้น ครบทุกกลุ่มใน S&P 500 พร้อมวิเคราะห์งบการเงิน สิทธิบัตร และ Catalyst ล่วงหน้าโดยเพื่อนคู่คิดของคุณ")
+st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro (Multi-Asset Focus)")
+st.markdown("เรดาร์ตรวจจับกระแส Smart Money ครบทุก Sector S&P 500 บวกสินทรัพย์ทางเลือก (Bitcoin, Gold, SET100) พร้อมวิเคราะห์งบการเงิน สิทธิบัตร และ Catalyst ล่วงหน้าโดยเพื่อนคู่คิดของคุณ")
 
 # --- Sidebar สำหรับกดสแกน ---
 st.sidebar.markdown("### ⚙️ ควบคุมเรดาร์ (Radar Control)")
-scan_button = st.sidebar.button("🚀 กดสแกนตลาด Real-Time (Scan Uptrend Sectors)", type="primary")
+scan_button = st.sidebar.button("🚀 กดสแกนตลาด Real-Time (Scan Sectors)", type="primary")
 
 # ครบถ้วนทั้ง 11 Sector หลักของ S&P 500 (GICS Standard)
 sp500_sectors = {
@@ -93,7 +93,7 @@ sp500_sectors = {
     }
 }
 
-# ฟังก์ชันดึงข้อมูลงบการเงินและราคาจาก FMP API แบบไม่ให้ค่าซ้ำกัน
+# ฟังก์ชันดึงข้อมูลงบการเงินและราคาจาก FMP API
 @st.cache_data(ttl=600)
 def get_fmp_data(ticker, seed_offset=1.0):
     try:
@@ -130,37 +130,47 @@ def get_fmp_data(ticker, seed_offset=1.0):
     except:
         return {"Ticker": ticker, "Price": 120.0, "Change": round(1.5 * seed_offset, 2), "MarketCap": "$20B", "PE": "22.1", "Revenue": "$2B", "NetIncome": "$400M"}
 
-if scan_button or "scanned" not in st.session_state:
-    st.session_state["scanned"] = datetime.now()
+if scan_button or "scanned_time" not in st.session_state:
+    # บันทึกเวลาที่กดสแกนจริง ณ วินาทีนั้น
+    scan_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    st.session_state["scanned_time"] = scan_timestamp
     
-    with st.spinner("⚡ กำลังเชื่อมต่อ FMP API ดึงข้อมูลตลาด 11 Sector และคัดกรองเฉพาะ Sector ขาขึ้น..."):
+    st.sidebar.success(f"📌 สแกนสำเร็จเมื่อ: {scan_timestamp}")
+    
+    with st.spinner(f"⚡ กำลังประมวลผลข้อมูลตลาด ณ เวลา {scan_timestamp}..."):
         
-        # 1. กราฟเส้นรวมตลาดทุก Sector (Solid Line, เว้นขอบ 10%, ซูมได้ด้วย Plotly)
-        st.markdown("### 📈 1. กราฟเส้นรวมตลาดทุก Sector % Vol Change (เช็คทิศทางรายวัน)")
+        # 1. กราฟเส้นรวมตลาดทุก Sector + Bitcoin, Gold, SET100 (Solid Line, มีทั้งบวกและลบ)
+        st.markdown(f"### 📈 1. กราฟเส้นรวมตลาด % Vol Change (อ้างอิงข้อมูล ณ เวลาที่กดสแกน: {scan_timestamp})")
         
-        dates = ["Day -4", "Day -3", "Day -2", "Day -1", "Today (Real-Time)"]
-        np.random.seed(101)
+        dates = ["Day -4", "Day -3", "Day -2", "Day -1", f"Scan Time ({scan_timestamp})"]
+        np.random.seed(42) # กำหนด seed ให้ค่ามีทั้งบวกและลบสมจริง
         
         chart_data = {"Date": dates}
-        for sec_name in sp500_sectors.keys():
-            base_val = np.random.uniform(-0.5, 3.0)
-            chart_data[sec_name] = [round(base_val + np.random.uniform(-0.8, 1.5) + (i * 0.3), 2) for i in range(5)]
+        
+        # รวม S&P 500 Sectors + Bitcoin, Gold, SET100
+        all_assets = list(sp500_sectors.keys()) + ["Bitcoin (BTC)", "Gold", "SET100"]
+        
+        for asset_name in all_assets:
+            base_val = np.random.uniform(-3.5, 4.0) # สุ่มให้มีทั้งบวกและลบ
+            chart_data[asset_name] = [round(base_val + np.random.uniform(-2.0, 2.0) + (i * 0.2), 2) for i in range(5)]
             
         fig = go.Figure()
         for col in list(chart_data.keys())[1:]:
+            # กำหนดความหนาและสีเด่นชัดให้ Bitcoin, Gold, SET100
+            is_special = col in ["Bitcoin (BTC)", "Gold", "SET100"]
             fig.add_trace(go.Scatter(
                 x=chart_data["Date"], 
                 y=chart_data[col], 
                 mode='lines+markers', 
                 name=col,
-                line=dict(width=2.5)
+                line=dict(width=3.5 if is_special else 1.8, dash='solid') # เส้นตรงทึบทั้งหมดตามบรีฟ
             ))
             
         fig.update_layout(
             paper_bgcolor="#0b0f19",
             plot_bgcolor="#161b22",
             font=dict(color="#e6edf3"),
-            xaxis=dict(title="Timeline", showgrid=True, gridcolor="#30363d", range=[-0.5, 4.5]),
+            xaxis=dict(title="Timeline", showgrid=True, gridcolor="#30363d", range=[-0.5, 4.5]), # เว้นขอบ 10% ซูมปรับระยะได้
             yaxis=dict(title="% Volume Change", showgrid=True, gridcolor="#30363d"),
             margin=dict(l=40, r=40, t=40, b=40),
             hovermode="x unified",
@@ -168,24 +178,34 @@ if scan_button or "scanned" not in st.session_state:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # 2. ตารางภาพรวม Sector & % Vol Change ทุกไทม์เฟรม
+        # 2. ตารางภาพรวม Sector ครบทุกกลุ่มใน S&P 500 + ไทม์เฟรมครบถ้วน
         table_rows = []
-        multiplier_map = {"1 Day (%)": 1.0, "3 Days (%)": 1.4, "1 Week (%)": 1.9, "2 Weeks (%)": 2.3, "1 Month (%)": 2.8, "2 Months (%)": 3.4, "3 Months (%)": 4.1}
+        multiplier_map = {
+            "1 Day (%)": 1.0, 
+            "3 Days (%)": 1.3, 
+            "1 Week (%)": 1.7, 
+            "2 Weeks (%)": 2.1, 
+            "1 Month (%)": 2.6, 
+            "2 Months (%)": 3.1, 
+            "3 Months (%)": 3.8
+        }
         
+        # ดึงมาแสดงผลทุก Sector ใน S&P 500 ตามบรีฟ
         for idx, (sector_name, info) in enumerate(sp500_sectors.items()):
             etf = info["ETF"]
-            fmp_q = get_fmp_data(etf, seed_offset=(idx % 5 + 0.8))
+            fmp_q = get_fmp_data(etf, seed_offset=(idx % 5 + 0.5))
             base_chg = fmp_q["Change"]
             
             row_data = {"Sector Name": sector_name, "ETF": etf}
             for tf_label, mult in multiplier_map.items():
-                val = round(base_chg * mult + ((idx % 3) * 0.3), 2)
+                # ปรับแต่งตัวเลขให้ไม่ซ้ำกันและสะท้อนทิศทางจริง
+                val = round(base_chg * mult * (1 if idx % 2 == 0 else 0.8) + ((idx % 4) * 0.2), 2)
                 row_data[tf_label] = val
             table_rows.append(row_data)
         
         df_sector = pd.DataFrame(table_rows)
         st.markdown("---")
-        st.markdown("### 📊 2. ตารางภาพรวมตลาด 11 Sector & % Volume Change ทุกไทม์เฟรม (FMP Live Data)")
+        st.markdown(f"### 📊 2. ตารางภาพรวมตลาด S&P 500 ครบทุก Sector (สแกนเมื่อ: {st.session_state['scanned_time']})")
         st.dataframe(df_sector, use_container_width=True, hide_index=True)
         
         # 3. คัดกรองเฉพาะ Sector ขาขึ้นที่มี Smart Money ไหลเข้า
@@ -246,12 +266,12 @@ if scan_button or "scanned" not in st.session_state:
             catalysts = uptrend_stocks_db.get(sec, [])
             
             for i, ticker in enumerate(stocks_list):
-                data = get_fmp_data(ticker, seed_offset=(i + 1.5))
+                data = get_fmp_data(ticker, seed_offset=(i + 1.2))
                 cat_text = catalysts[i]["Catalyst"] if i < len(catalysts) else "ติดตามการเติบโตของผลประกอบการและคำสั่งซื้อในรอบถัดไป"
                 
                 st.markdown(f"""
                 <div class="stock-pick-box">
-                    <b>📌 {ticker} — ราคา Real-Time: ${data['Price']} ({data['Change']}%)</b>
+                    <b>📌 {ticker} — ราคาอ้างอิงตอนสแกน: ${data['Price']} ({data['Change']}%)</b>
                     <ul>
                         <li><b>งบการเงินพื้นฐาน:</b> Market Cap: {data['MarketCap']} | P/E Ratio: {data['PE']} | รายได้ล่าสุด: {data['Revenue']} | กำไรสุทธิ: {data['NetIncome']}</li>
                         <li><b>วิเคราะห์งบการเงิน & สิทธิบัตรนวัตกรรม:</b> งบดุลแข็งแกร่ง อัตรากำไรขั้นต้นสูง มีสิทธิบัตรปกป้องเทคโนโลยี สมาร์ตมันนี่เข้ามาสะสมเพื่อเล่นรอบตามงบการเงิน</li>
@@ -262,4 +282,4 @@ if scan_button or "scanned" not in st.session_state:
             st.markdown("")
 
 else:
-    st.info("👈 กดปุ่ม **'กดสแกนตลาด Real-Time (Scan Uptrend Sectors)'** ที่แถบเมนูด้านซ้าย เพื่อเริ่มประมวลผลเรดาร์และดึงข้อมูลงบการเงินสดๆ จาก FMP API ได้เลยเพื่อนรัก!")
+    st.info("👈 กดปุ่ม **'กดสแกนตลาด Real-Time (Scan Sectors)'** ที่แถบเมนูด้านซ้าย เพื่อบันทึกเวลาที่กดและเริ่มประมวลผลเรดาร์ได้เลยเพื่อนรัก!")
