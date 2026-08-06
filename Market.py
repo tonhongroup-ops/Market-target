@@ -24,7 +24,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors & Innovation Flow** พร้อมบทวิเคราะห์เจาะลึกสิทธิบัตร รอบข่าวสาร และเกมการเงินจากเพื่อนคู่คิดของคุณ")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors, Macro Liquidity & Innovation Flow** บทวิเคราะห์สิทธิบัตรและเกมการเงินจากเพื่อนคู่คิดของคุณ")
 
 # --- Sidebar สำหรับปรับแต่ง Timeframe ---
 st.sidebar.markdown("### ⚙️ ตั้งค่าเรดาร์ (Radar Settings)")
@@ -35,7 +35,7 @@ timeframe_option = st.sidebar.selectbox(
     format_func=lambda x: {"1mo": "1 เดือน", "3mo": "3 เดือน", "6mo": "6 เดือน", "1y": "1 ปี"}[x]
 )
 
-# --- รวบรวม Sector และสินทรัพย์นวัตกรรมหลัก (ตัดตัวที่ไม่เกี่ยวข้องออกเพื่อความคมชัด) ---
+# --- รวบรวม Sector นวัตกรรม และสินทรัพย์สะท้อนสภาพคล่องครบถ้วน ---
 radar_assets = {
     "Technology & AI (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
@@ -46,7 +46,9 @@ radar_assets = {
     "Consumer Staples (XLP)": "XLP",
     "Energy & Clean Tech (XLE)": "XLE",
     "Advanced Materials (XLB)": "XLB",
-    "Utilities (XLU)": "XLU"
+    "Utilities (XLU)": "XLU",
+    "Gold / Safe Haven (GC=F)": "GC=F",
+    "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
@@ -56,7 +58,6 @@ def fetch_multi_period_volume_flow(assets_dict, period_str):
     
     for name, symbol in assets_dict.items():
         try:
-            # ดึงข้อมูลตาม Timeframe ที่เลือก
             df = yf.download(symbol, period=period_str, auto_adjust=True, progress=False)
             if not df.empty:
                 if isinstance(df.columns, pd.MultiIndex):
@@ -66,8 +67,8 @@ def fetch_multi_period_volume_flow(assets_dict, period_str):
                     vol = df['Volume'].dropna()
                     if len(vol) >= 25:
                         vol_sma20 = vol.rolling(window=20).mean()
-                        vol_sma40 = vol.rolling(window=40).mean() if len(vol) >= 40 else vol_sma20 # 2 เดือน
-                        vol_sma60 = vol.rolling(window=60).mean() if len(vol) >= 60 else vol_sma20 # 3 เดือน
+                        vol_sma40 = vol.rolling(window=40).mean() if len(vol) >= 40 else vol_sma20
+                        vol_sma60 = vol.rolling(window=60).mean() if len(vol) >= 60 else vol_sma20
                         
                         v_latest = float(((vol.iloc[-1] - vol_sma20.iloc[-1]) / vol_sma20.iloc[-1]) * 100)
                         v_3d = float(((vol.iloc[-3:].mean() - vol_sma20.iloc[-3:].mean()) / vol_sma20.iloc[-3:].mean()) * 100)
@@ -88,7 +89,6 @@ def fetch_multi_period_volume_flow(assets_dict, period_str):
                             "3 Months (%)": round(v_3m, 2)
                         })
                         
-                        # เก็บข้อมูลราคาปิดไว้ทำกราฟ
                         if 'Close' in df.columns:
                             close_series = df['Close']
                             if isinstance(close_series, pd.DataFrame):
@@ -100,7 +100,6 @@ def fetch_multi_period_volume_flow(assets_dict, period_str):
             
     return pd.DataFrame(table_data), pd.DataFrame(chart_raw_data)
 
-# รันฟังก์ชันดึงข้อมูล
 with st.spinner(f'กำลังดึงข้อมูลตลาดและประมวลผลเรดาร์ (Timeframe: {timeframe_option})...'):
     df_result, df_chart = fetch_multi_period_volume_flow(radar_assets, timeframe_option)
 
@@ -110,45 +109,35 @@ if not df_result.empty:
     
     # --- กราฟรวมทุก Sector พร้อมกัน (จัดเลย์เอาต์เว้นขวา 10%) ---
     st.markdown("---")
-    st.markdown("### 📈 กราฟเปรียบเทียบทิศทางราคา 'ทุก Sector พร้อมกัน' (Normalized Growth Comparison)")
-    st.markdown("💡 *กราฟนี้ปรับฐานราคาเริ่มต้นที่ 100 เพื่อให้เห็นชัดๆ ว่า Sector ไหนพุ่งแรงหรือร่วงหนักกว่ากันในช่วงเวลาที่เลือก*")
+    st.markdown("### 📈 กราฟเปรียบเทียบทิศทางราคา 'ทุก Sector & Macro Assets พร้อมกัน' (Normalized Growth Comparison)")
+    st.markdown("💡 *กราฟนี้ปรับฐานราคาเริ่มต้นที่ 100 เพื่อให้เห็นการเคลื่อนตัวของทองคำ Bitcoin และทุก Sector พร้อมกันอย่างชัดเจน*")
     
     if not df_chart.empty:
-        # ใช้ Layout columns [9, 1] เพื่อเว้นพื้นที่ว่างทางขวาประมาณ 10%
         chart_col, spacer_col = st.columns([9, 1])
         with chart_col:
             st.line_chart(df_chart, use_container_width=True, height=500)
         with spacer_col:
-            st.markdown("") # พื้นที่ว่าง 10% ทางขวาตามรีเควส
+            st.markdown("")
     
-    # --- ส่วนวิเคราะห์เชิงลึก & หุ้นแนะนำที่มีนัยสำคัญ (ตามโจทย์ที่มึงต้องการ) ---
+    # --- ส่วนวิเคราะห์เชิงลึกสไตล์เซียนหุ้นนวัตกรรม & Macro Liquidity ---
     st.markdown("---")
-    st.markdown("### 🧠 มุมมองวิเคราะห์เกมทุน สิทธิบัตร และหุ้นไฮไลท์เล่นรอบ (Smart Money Insights)")
+    st.markdown("### 🧠 วิเคราะห์สภาพตลาดเชิงลึก: Macro Flow, Patent Moat & Playbook หุ้นเล่นรอบ")
     
     st.markdown("""
     <div class="analysis-box">
-    <h4>🔥 เจาะลึก Sector ขาขึ้น (Uptrend & Volume Surge) และหุ้นไฮไลท์มีนัยสำคัญ:</h4>
-    <p>จากโครงสร้างวอลุ่มและกระแสเงินทุนรอบนี้ เราคัดเฉพาะเซกเตอร์ที่มีสัญญาณ Volume ขาขึ้น และหุ้นแกร่งที่น่าสนใจสำหรับเล่นรอบ ดังนี้ครับเพื่อน:</p>
+    <h4>🔥 ถอดรหัสสภาพตลาด & เซกเตอร์ที่น่าสนใจในรอบนี้:</h4>
+    <p>จากข้อมูลตารางและสภาพกระแสเงินทุนรอบนี้ เราแบ่งการวิเคราะห์ออกเป็น 3 แกนหลักเพื่อให้เห็นภาพการเล่นรอบที่คมชัดที่สุดเพื่อน:</p>
     
     <div class="stock-pick-box">
-        <b>1. กลุ่ม Semiconductors / Patent Moat (SMH) & Tech AI (XLK):</b><br>
-        <i>สถานะ Volume & Trend:</i> มีแรงสะสมของสมาร์ตมันนี่ต่อเนื่อง รองรับดีมานด์ชิปประมวลผล AI และสถาปัตยกรรมคลาวด์<br>
-        <b>🎯 หุ้นไฮไลท์ & หุ้นเล่นรอบในรอบนี้:</b> 
-        <ul>
-            <li><b>NVDA (NVIDIA):</b> เจ้าพ่อสิทธิบัตรชิป AI โครงสร้างพื้นฐานระดับโลก มี Volume ขาขึ้นหนาแน่น เหมาะกับกลยุทธ์ Play the Breakout และทยอยสะสมที่แนวรับ</li>
-            <li><b>TSM (TSMC):</b> โรงหล่อชิปผูกขาดนวัตกรรม Patent Moat แกร่งที่สุดในอุตสาหกรรม</li>
-            <li><i>หุ้นไทยเชื่อมโยง:</i> <b>DELTA</b> (ตัวแทนฮาร์ดแวร์นวัตกรรมและระบบจัดการพลังงาน AI ใน SET100)</li>
-        </ul>
+        <b>1. แกนมหภาค & สภาพคล่อง (Macro & Safe Haven Signal):</b><br>
+        <i>นัยสำคัญจากทองคำ (Gold) และ Bitcoin:</i> การที่วอลุ่มทองคำพุ่งทะยานรุนแรง (Volume Spike) สะท้อนชัดเจนว่ากองทุนใหญ่และธนาคารกลางกำลังตั้งรับความเสี่ยงภูมิรัฐศาสตร์ (Geopolitical Risk) ขณะที่บิตคอยน์ทำหน้าที่เป็นตัววัดสภาพคล่องส่วนเกิน ถ้าย่อตัวลงแปลว่าสมาร์ตมันนี่เลือกตั้งรับความปลอดภัยชั่วคราว<br>
     </div>
 
     <div class="stock-pick-box-secondary">
-        <b>2. กลุ่ม Clean Energy & Smart Grid Tech (XLE / XLI):</b><br>
-        <i>สถานะ Volume & Trend:</i> กำลังฟื้นตัวจากโซนสะสม (Bottom Rebound) รับกระแส Energy Transition และการป้อนไฟให้ Data Center<br>
-        <b>🎯 หุ้นไฮไลท์ & หุ้นเล่นรอบในรอบนี้:</b>
+        <b>2. เซกเตอร์นวัตกรรมที่น่าสนใจที่สุด (Top Sectors to Watch):</b><br>
         <ul>
-            <li><b>FLNC (Fluence Energy):</b> ผู้นำระบบกักเก็บพลังงานอัจฉริยะ (Energy Storage) ยอด Backlog สูงสุดเป็นประวัติการณ์ รอจังหวะเล่นรอบ Speculative Turnaround</li>
-            <li><b>NEE (NextEra Energy):</b> ผู้นำนวัตกรรมพลังงานหมุนเวียนและโครงข่ายไฟฟ้าอัจฉริยะระดับโลก</li>
-            <li><i>หุ้นไทยเชื่อมโยง:</i> <b>GULF</b> (การขยายอาณาจักรสู่ Digital Infrastructure และ Smart Energy)</li>
+            <li><b>Semiconductors & Patent Moat (SMH / XLK):</b> แม้บางช่วงวอลุ่มจะชะลอตัวเพื่อสร้างฐาน (Base Building) แต่เชิงโครงสร้างระยะยาว นี่คือเซกเตอร์ที่มีสิทธิบัตรผูกขาดทางเทคโนโลยีแกร่งที่สุดในโลก (เช่น สถาปัตยกรรมชิป AI ของ NVDA และการผลิตระดับพรีเมียมของ TSM) เหมาะกับการรอจังหวะสะสมเมื่อราคาย่อตัว</li>
+            <li><b>Clean Energy & Smart Grid (XLE / XLI):</b> ได้อานิสงส์จากดีล Data Center ที่ต้องการพลังงานสะอาดป้อนระบบ 24/7 หุ้นอย่าง <b>FLNC</b> (ระบบกักเก็บพลังงาน) ที่มี Backlog ล้นมือ ถือเป็นหุ้น Turnaround ที่น่าจับตาการเล่นรอบ</li>
         </ul>
     </div>
     </div>
