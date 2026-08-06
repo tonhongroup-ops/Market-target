@@ -6,7 +6,7 @@ from datetime import datetime
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
-    page_title="Global Innovation & Patent Smart Money Radar",
+    page_title="Global Innovation & Patent Smart Money Radar Pro",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -46,21 +46,29 @@ def fetch_multi_period_volume_flow(assets_dict):
     
     for name, symbol in assets_dict.items():
         try:
-            df = yf.download(symbol, period="3mo", auto_adjust=True, progress=False)
+            # ดึงข้อมูลย้อนหลัง 6 เดือน เพื่อให้ครอบคลุมการคำนวณค่าเฉลี่ย 3 เดือน (ประมาณ 60 แท่งเทียน) ได้อย่างแม่นยำ
+            df = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
             if not df.empty:
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = df.columns.droplevel(1)
                 
                 if 'Volume' in df.columns:
                     vol = df['Volume'].dropna()
-                    if len(vol) >= 30:
+                    if len(vol) >= 70: # เช็คว่ามีข้อมูลเพียงพอสำหรับ 60 วันทำการ
                         vol_sma20 = vol.rolling(window=20).mean()
+                        vol_sma40 = vol.rolling(window=40).mean() # ค่าเฉลี่ย 2 เดือน
+                        vol_sma60 = vol.rolling(window=60).mean() # ค่าเฉลี่ย 3 เดือน
                         
+                        # คำนวณ %volchange เทียบกับค่าเฉลี่ยแต่ละช่วงเวลา
                         v_latest = float(((vol.iloc[-1] - vol_sma20.iloc[-1]) / vol_sma20.iloc[-1]) * 100)
                         v_3d = float(((vol.iloc[-3:].mean() - vol_sma20.iloc[-3:].mean()) / vol_sma20.iloc[-3:].mean()) * 100)
                         v_1w = float(((vol.iloc[-5:].mean() - vol_sma20.iloc[-5:].mean()) / vol_sma20.iloc[-5:].mean()) * 100)
                         v_2w = float(((vol.iloc[-10:].mean() - vol_sma20.iloc[-10:].mean()) / vol_sma20.iloc[-10:].mean()) * 100)
                         v_1m = float(((vol.iloc[-20:].mean() - vol_sma20.iloc[-20:].mean()) / vol_sma20.iloc[-20:].mean()) * 100)
+                        
+                        # เพิ่มการคำนวณ 2 เดือน และ 3 เดือน เทียบปัจจุบันกับค่าเฉลี่ยย้อนหลังช่วงนั้นๆ
+                        v_2m = float(((vol.iloc[-1] - vol_sma40.iloc[-1]) / vol_sma40.iloc[-1]) * 100)
+                        v_3m = float(((vol.iloc[-1] - vol_sma60.iloc[-1]) / vol_sma60.iloc[-1]) * 100)
                         
                         table_data.append({
                             "Sector / Asset": name,
@@ -68,7 +76,9 @@ def fetch_multi_period_volume_flow(assets_dict):
                             "3 Days (%)": round(v_3d, 2),
                             "1 Week (%)": round(v_1w, 2),
                             "2 Weeks (%)": round(v_2w, 2),
-                            "1 Month (%)": round(v_1m, 2)
+                            "1 Month (%)": round(v_1m, 2),
+                            "2 Months (%)": round(v_2m, 2),
+                            "3 Months (%)": round(v_3m, 2)
                         })
         except Exception as e:
             continue
@@ -89,7 +99,6 @@ if not df_result.empty:
     
     # ตรวจสอบพฤติกรรมทองคำและกลุ่มเทคจากข้อมูลล่าสุดเพื่อจำลองการวิเคราะห์อัตโนมัติ
     gold_row = df_result[df_result['Sector / Asset'].str.contains('Gold')]
-    tech_row = df_result[df_result['Sector / Asset'].str.contains('Semiconductors')]
     
     is_gold_panic = False
     if not gold_row.empty:
@@ -106,7 +115,7 @@ if not df_result.empty:
     <div class="analysis-box">
     <h4>💡 คำแนะนำเชิงกลยุทธ์การเล่นรอบ (Action Plan):</h4>
     <ul>
-        <li><b>สำหรับกลุ่มนวัตกรรม & สิทธิบัตร (Tech / AI / SMH):</b> ช่วงที่วอลุ่มซึมตัวหรือโดนดึงสภาพคล่องออกไปชั่วคราว ถือเป็นจังหวะทองในการนั่งทำการบ้าน แกะรอยงบการเงิน และเช็กสตอรี่สิทธิบัตรเชิงลึก อย่าเพิ่งรีบไล่ราคา ให้รอจังหวะย่อตัวสะสมที่แนวรับ</li>
+        <li><b>สำหรับกลุ่มนวัตกรรม & สิทธิบัตร (Tech / AI / SMH):</b> ช่วงที่วอลุ่มซึมตัวหรือโดนดึงสภาพคล่องออกไปชั่วคราว (สังเกตจาก % Vol Change ในช่วง 2-3 เดือนที่หดตัว) ถือเป็นจังหวะทองในการนั่งทำการบ้าน แกะรอยงบการเงิน และเช็กสตอรี่สิทธิบัตรเชิงลึก อย่าเพิ่งรีบไล่ราคา ให้รอจังหวะย่อตัวสะสมที่แนวรับ</li>
         <li><b>การจับตา Catalyst:</b> ติดตามข่าวสารการประกาศผลประกอบการและทิศทางการลงทุนในโครงสร้างพื้นฐานเทคโนโลยี เพราะเมื่อไหร่ที่เงินทุนเริ่มหมุนกลับ (Risk-On) หุ้นที่มี Patent Moat แกร่งจะดีดตัวแรงที่สุด</li>
     </ul>
     </div>
@@ -114,7 +123,3 @@ if not df_result.empty:
 
 else:
     st.warning("⚠️ กำลังเชื่อมต่อข้อมูลตลาด ลองกดรีเฟรชหน้าจออีกครั้งเพื่อน!")
-    
-
-
-เพิ่มจากโค้ดนี้นะ เป็น %volchangeโดยแสดงผลเป็นค่าที่คิดจากปัจจุบัน  เพิ่ม timeframe  อีก 2และ3 เดือน
