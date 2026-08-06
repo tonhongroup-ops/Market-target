@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 from datetime import datetime
+import requests
+
+# --- ตั้งค่า FMP API Key ที่มึงให้มา ---
+FMP_API_KEY = "akyx1POpzLt8geYg7oCuIvQW0qIsQjnh"
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
 st.set_page_config(
@@ -24,8 +28,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors, Macro Liquidity & Innovation Flow** บทวิเคราะห์สิทธิบัตรและเกมการเงินจากเพื่อนคู่คิดของคุณ")
+st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro (FMP Real-Time)")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors, Macro Liquidity & Innovation Flow** พร้อมงบการเงินและราคา Real-Time ผ่าน FMP API")
 
 # --- Sidebar สำหรับปรับแต่ง Timeframe ---
 st.sidebar.markdown("### ⚙️ ตั้งค่าเรดาร์ (Radar Settings)")
@@ -109,7 +113,7 @@ st.markdown(f"### 📊 ตารางเปรียบเทียบ % Volume
 if not df_result.empty:
     st.dataframe(df_result, use_container_width=True, hide_index=True)
     
-    # --- กราฟรวมทุก Sector พร้อมกัน (จัดเลย์เอาต์เว้นขวา 10%) ---
+    # --- กราฟรวมทุก Sector พร้อมกัน ---
     st.markdown("---")
     st.markdown("### 📈 กราฟเปรียบเทียบทิศทางราคา 'ทุก Sector & Macro Assets พร้อมกัน' (Normalized Growth Comparison)")
     st.markdown("💡 *กราฟนี้ปรับฐานราคาเริ่มต้นที่ 100 เพื่อให้เห็นการเคลื่อนตัวของทองคำ Bitcoin และทุก Sector พร้อมกันอย่างชัดเจน*")
@@ -120,56 +124,101 @@ if not df_result.empty:
             st.line_chart(df_chart, use_container_width=True, height=500)
         with spacer_col:
             st.markdown("")
-    
-    # --- ส่วนวิเคราะห์เชิงลึกสไตล์เซียนหุ้นนวัตกรรม & Macro Liquidity ---
-    st.markdown("---")
-    st.markdown("### 🧠 วิเคราะห์สภาพตลาดเชิงลึก: Macro Flow, Patent Moat & Playbook หุ้นเล่นรอบ")
-    
-    st.markdown("""
-    <div class="analysis-box">
-    <h4>🔥 ถอดรหัสสภาพตลาด & เซกเตอร์ที่น่าสนใจในรอบนี้:</h4>
-    <p>จากข้อมูลตารางและสภาพกระแสเงินทุนรอบนี้ เราแบ่งการวิเคราะห์ออกเป็น 3 แกนหลักเพื่อให้เห็นภาพการเล่นรอบที่คมชัดที่สุดเพื่อน:</p>
-    
-    <div class="stock-pick-box">
-        <b>1. แกนมหภาค & สภาพคล่อง (Macro & Safe Haven Signal):</b><br>
-        <i>นัยสำคัญจากทองคำ (Gold) และ Bitcoin:</i> การที่วอลุ่มทองคำพุ่งทะยานรุนแรง (Volume Spike) สะท้อนชัดเจนว่ากองทุนใหญ่และธนาคารกลางกำลังตั้งรับความเสี่ยงภูมิรัฐศาสตร์ (Geopolitical Risk) ขณะที่บิตคอยน์ทำหน้าที่เป็นตัววัดสภาพคล่องส่วนเกิน ถ้าย่อตัวลงแปลว่าสมาร์ตมันนี่เลือกตั้งรับความปลอดภัยชั่วคราว<br>
-    </div>
 
-    <div class="stock-pick-box-secondary">
-        <b>2. เซกเตอร์นวัตกรรมที่น่าสนใจที่สุด (Top Sectors to Watch):</b><br>
-        <ul>
-            <li><b>Semiconductors & Patent Moat (SMH / XLK):</b> แม้บางช่วงวอลุ่มจะชะลอตัวเพื่อสร้างฐาน (Base Building) แต่เชิงโครงสร้างระยะยาว นี่คือเซกเตอร์ที่มีสิทธิบัตรผูกขาดทางเทคโนโลยีแกร่งที่สุดในโลก (เช่น สถาปัตยกรรมชิป AI ของ NVDA และการผลิตระดับพรีเมียมของ TSM) เหมาะกับการรอจังหวะสะสมเมื่อราคาย่อตัว</li>
-            <li><b>Clean Energy & Smart Grid (XLE / XLI):</b> ได้อานิสงส์จากดีล Data Center ที่ต้องการพลังงานสะอาดป้อนระบบ 24/7 หุ้นอย่าง <b>FLNC</b> (ระบบกักเก็บพลังงาน) ที่มี Backlog ล้นมือ ถือเป็นหุ้น Turnaround ที่น่าจับตาการเล่นรอบ</li>
-        </ul>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
+# --- ฟังก์ชันดึงข้อมูลงบการเงินและราคา Real-Time ผ่าน FMP API ---
+@st.cache_data(ttl=600)
+def fetch_fmp_financials_and_quotes(api_key, tickers_list):
+    fmp_data = []
+    for ticker in tickers_list:
+        try:
+            # ดึงราคา Real-time Quote จาก FMP
+            quote_url = f"https://financialmodelingprep.com/stable/quote?symbol={ticker}&apikey={api_key}"
+            q_res = requests.get(quote_url).json()
+            
+            # ดึงข้อมูลงบการเงินล่าสุด (Income Statement)
+            inc_url = f"https://financialmodelingprep.com/stable/income-statement?symbol={ticker}&limit=1&apikey={api_key}"
+            inc_res = requests.get(inc_url).json()
+            
+            if q_res and isinstance(q_res, list) and len(q_res) > 0:
+                q_info = q_res[0]
+                rev_str, ni_str = "N/A", "N/A"
+                
+                if inc_res and isinstance(inc_res, list) and len(inc_res) > 0:
+                    latest_inc = inc_res[0]
+                    rev = latest_inc.get("revenue", 0)
+                    ni = latest_inc.get("netIncome", 0)
+                    rev_str = f"${rev:,.0f}" if rev else "N/A"
+                    ni_str = f"${ni:,.0f}" if ni else "N/A"
+                
+                fmp_data.append({
+                    "Ticker": q_info.get("symbol"),
+                    "Company": q_info.get("name"),
+                    "Real-Time Price ($)": q_info.get("price"),
+                    "Change (%)": round(q_info.get("changesPercentage", 0.0), 2),
+                    "Market Cap": f"${q_info.get('marketCap', 0):,.0f}",
+                    "PE Ratio": q_info.get("pe"),
+                    "Latest Revenue": rev_str,
+                    "Latest Net Income": ni_str
+                })
+        except Exception as e:
+            continue
+    return pd.DataFrame(fmp_data)
 
-    # --- ส่วนสรุปหุ้นเด่น 3 ตัวที่กำลังเกาะเทรนด์ (ตามรีเควส) ---
-    st.markdown("---")
-    st.markdown("### 🎯 สรุปหุ้นเด่น 3 ตัวเกาะเทรนด์นวัตกรรม & สิทธิบัตร (Top 3 Trend-Following Stocks)")
-    st.markdown("💡 *สรุปสั้นกระชับสำหรับนำไปส่งต่อและวางแผนเล่นรอบตามกระแสสมาร์ตมันนี่*")
+# แสดงตาราง FMP Real-Time สำหรับหุ้นไฮไลท์นวัตกรรม
+st.markdown("---")
+st.markdown("### ⚡ FMP Real-Time Financials & Quotes (หุ้นนวัตกรรมและสิทธิบัตรระดับโลก)")
+with st.spinner("กำลังดึงข้อมูลงบการเงินและราคาแบบสดๆ จาก FMP API..."):
+    df_fmp_live = fetch_fmp_financials_and_quotes(FMP_API_KEY, ["AVGO", "ANET", "VRT", "NVDA", "TSM"])
+    if not df_fmp_live.empty:
+        st.dataframe(df_fmp_live, use_container_width=True, hide_index=True)
+    else:
+        st.warning("⚠️ ไม่สามารถดึงข้อมูล FMP Real-Time ได้ในขณะนี้ ตรวจสอบสถานะ API Key")
 
-    st.markdown("""
-    <div class="top3-box">
-        <b>1. Broadcom Inc. (NASDAQ: AVGO) — เจ้าพ่อ Custom AI Silicon & High-Speed Networking</b><br>
-        * <b>เทรนด์และสิทธิบัตร:</b> ผูกขาดสิทธิบัตรระบบเครือข่ายความเร็วสูง (Networking) และการออกแบบชิป AI เฉพาะกิจ (Custom ASIC) ให้กับคลาวด์ยักษ์ใหญ่<br>
-        * <b>มุมมองการเล่นรอบ:</b> งบการเงินแข็งแกร่ง กระแสเงินสดอิสระสูง เหมาะกับการรอจังหวะย่อตัวเข้าสะสมที่แนวรับหลักเมื่อวอลุ่มฝั่งขายแห้ง
-    </div>
+# --- ส่วนวิเคราะห์เชิงลึกสไตล์เซียนหุ้นนวัตกรรม & Macro Liquidity ---
+st.markdown("---")
+st.markdown("### 🧠 วิเคราะห์สภาพตลาดเชิงลึก: Macro Flow, Patent Moat & Playbook หุ้นเล่นรอบ")
 
-    <div class="top3-box" style="border-left-color: #335dff;">
-        <b>2. Arista Networks, Inc. (NASDAQ: ANET) — กระดูกสันหลัง AI Data Center Fabric</b><br>
-        * <b>เทรนด์และสิทธิบัตร:</b> เจ้าของสิทธิบัตรซอฟต์แวร์จัดการโครงข่าย Low Latency (CloudVision & EOS) ที่จำเป็นต้องใช้ในการเชื่อมโยงคลัสเตอร์ AI ขนาดมหึมา<br>
-        * <b>มุมมองการเล่นรอบ:</b> งบเติบโตต่อเนื่อง ไร้หนี้กวนใจ ทรงกราฟแข็งแกร่งกว่าตลาด เหมาะกับกลยุทธ์เล่นรอบแบบ Breakout ตามกรอบสะสม
-    </div>
+st.markdown("""
+<div class="analysis-box">
+<h4>🔥 ถอดรหัสสภาพตลาด & เซกเตอร์ที่น่าสนใจในรอบนี้:</h4>
+<p>จากข้อมูลตารางและสภาพกระแสเงินทุนรอบนี้ เราแบ่งการวิเคราะห์ออกเป็น 3 แกนหลักเพื่อให้เห็นภาพการเล่นรอบที่คมชัดที่สุดเพื่อน:</p>
 
-    <div class="top3-box" style="border-left-color: #f0883e;">
-        <b>3. Vertiv Holdings Co. (NYSE: VRT) — ผู้นำระบบระบายความร้อน AI Data Center (Liquid Cooling)</b><br>
-        * <b>เทรนด์และสิทธิบัตร:</b> ถือสิทธิบัตรระบบบริหารจัดการความร้อนและพลังงานแรงดันสูงสำหรับตู้แร็คเซิร์ฟเวอร์ AI ยุคใหม่ ซึ่งเป็นคอขวดสำคัญของอุตสาหกรรม<br>
-        * <b>มุมมองการเล่นรอบ:</b> แบ็กล็อกงานในมือล้นทะลัก รับอานิสงส์การสร้างดาต้าเซ็นเตอร์ทั่วโลก เล่นรอบตามจังหวะรีบาวด์จากโซนแนวรับสำคัญ
-    </div>
-    """, unsafe_allow_html=True)
+<div class="stock-pick-box">
+    <b>1. แกนมหภาค & สภาพคล่อง (Macro & Safe Haven Signal):</b><br>
+    <i>นัยสำคัญจากทองคำ (Gold) และ Bitcoin:</i> การที่วอลุ่มทองคำพุ่งทะยานรุนแรง (Volume Spike) สะท้อนชัดเจนว่ากองทุนใหญ่และธนาคารกลางกำลังตั้งรับความเสี่ยงภูมิรัฐศาสตร์ (Geopolitical Risk) ขณะที่บิตคอยน์ทำหน้าที่เป็นตัววัดสภาพคล่องส่วนเกิน ถ้าย่อตัวลงแปลว่าสมาร์ตมันนี่เลือกตั้งรับความปลอดภัยชั่วคราว<br>
+</div>
 
-else:
-    st.warning("⚠️ กำลังเชื่อมต่อข้อมูลตลาด ลองกดรีเฟรชหน้าจออีกครั้งเพื่อน!")
-    
+<div class="stock-pick-box-secondary">
+    <b>2. เซกเตอร์นวัตกรรมที่น่าสนใจที่สุด (Top Sectors to Watch):</b><br>
+    <ul>
+        <li><b>Semiconductors & Patent Moat (SMH / XLK):</b> แม้บางช่วงวอลุ่มจะชะลอตัวเพื่อสร้างฐาน (Base Building) แต่เชิงโครงสร้างระยะยาว นี่คือเซกเตอร์ที่มีสิทธิบัตรผูกขาดทางเทคโนโลยีแกร่งที่สุดในโลก (เช่น สถาปัตยกรรมชิป AI ของ NVDA และการผลิตระดับพรีเมียมของ TSM) เหมาะกับการรอจังหวะสะสมเมื่อราคาย่อตัว</li>
+        <li><b>Clean Energy & Smart Grid (XLE / XLI):</b> ได้อานิสงส์จากดีล Data Center ที่ต้องการพลังงานสะอาดป้อนระบบ 24/7 หุ้นอย่าง <b>FLNC</b> (ระบบกักเก็บพลังงาน) ที่มี Backlog ล้นมือ ถือเป็นหุ้น Turnaround ที่น่าจับตาการเล่นรอบ</li>
+    </ul>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+# --- ส่วนสรุปหุ้นเด่น 3 ตัวที่กำลังเกาะเทรนด์ ---
+st.markdown("---")
+st.markdown("### 🎯 สรุปหุ้นเด่น 3 ตัวเกาะเทรนด์นวัตกรรม & สิทธิบัตร (Top 3 Trend-Following Stocks)")
+st.markdown("💡 *สรุปสั้นกระชับสำหรับนำไปส่งต่อและวางแผนเล่นรอบตามกระแสสมาร์ตมันนี่*")
+
+st.markdown("""
+<div class="top3-box">
+    <b>1. Broadcom Inc. (NASDAQ: AVGO) — เจ้าพ่อ Custom AI Silicon & High-Speed Networking</b><br>
+    * <b>เทรนด์และสิทธิบัตร:</b> ผูกขาดสิทธิบัตรระบบเครือข่ายความเร็วสูง (Networking) และการออกแบบชิป AI เฉพาะกิจ (Custom ASIC) ให้กับคลาวด์ยักษ์ใหญ่<br>
+    * <b>มุมมองการเล่นรอบ:</b> งบการเงินแข็งแกร่ง กระแสเงินสดอิสระสูง เหมาะกับการรอจังหวะย่อตัวเข้าสะสมที่แนวรับหลักเมื่อวอลุ่มฝั่งขายแห้ง
+</div>
+
+<div class="top3-box" style="border-left-color: #335dff;">
+    <b>2. Arista Networks, Inc. (NASDAQ: ANET) — กระดูกสันหลัง AI Data Center Fabric</b><br>
+    * <b>เทรนด์และสิทธิบัตร:</b> เจ้าของสิทธิบัตรซอฟต์แวร์จัดการโครงข่าย Low Latency (CloudVision & EOS) ที่จำเป็นต้องใช้ในการเชื่อมโยงคลัสเตอร์ AI ขนาดมหึมา<br>
+    * <b>มุมมองการเล่นรอบ:</b> งบเติบโตต่อเนื่อง ไร้หนี้กวนใจ ทรงกราฟแข็งแกร่งกว่าตลาด เหมาะกับกลยุทธ์เล่นรอบแบบ Breakout ตามกรอบสะสม
+</div>
+
+<div class="top3-box" style="border-left-color: #f0883e;">
+    <b>3. Vertiv Holdings Co. (NYSE: VRT) — ผู้นำระบบระบายความร้อน AI Data Center (Liquid Cooling)</b><br>
+    * <b>เทรนด์และสิทธิบัตร:</b> ถือสิทธิบัตรระบบบริหารจัดการความร้อนและพลังงานแรงดันสูงสำหรับตู้แร็คเซิร์ฟเวอร์ AI ยุคใหม่ ซึ่งเป็นคอขวดสำคัญของอุตสาหกรรม<br>
+    * <b>มุมมองการเล่นรอบ:</b> แบ็กล็อกงานในมือล้นทะลัก รับอานิสงส์การสร้างดาต้าเซ็นเตอร์ทั่วโลก เล่นรอบตามจังหวะรีบาวด์จากโซนแนวรับสำคัญ
+</div>
+""", unsafe_allow_html=True)
