@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import plotly.graph_objects as go
+from datetime import datetime  # <--- เพิ่มตัวนี้เข้ามาครับเพื่อน
 
 # --- ตั้งค่า API Key ของ FMP ---
 FMP_API_KEY = "akyx1POpzLt8geYg7oCuIvQW0qIsQjnh"
@@ -130,7 +131,7 @@ def get_fmp_data(ticker, seed_offset=1.0):
         return {"Ticker": ticker, "Price": 120.0, "Change": round(1.5 * seed_offset, 2), "MarketCap": "$20B", "PE": "22.1", "Revenue": "$2B", "NetIncome": "$400M"}
 
 if scan_button or "scanned" not in st.session_state:
-    st.session_state["scanned"] = Date = datetime.now()
+    st.session_state["scanned"] = datetime.now()
     
     with st.spinner("⚡ กำลังเชื่อมต่อ FMP API ดึงข้อมูลตลาด 11 Sector และคัดกรองเฉพาะ Sector ขาขึ้น..."):
         
@@ -152,14 +153,14 @@ if scan_button or "scanned" not in st.session_state:
                 y=chart_data[col], 
                 mode='lines+markers', 
                 name=col,
-                line=dict(width=2.5) # เส้นตรงทึบ (Solid Line) ตามบรีฟ
+                line=dict(width=2.5)
             ))
             
         fig.update_layout(
             paper_bgcolor="#0b0f19",
             plot_bgcolor="#161b22",
             font=dict(color="#e6edf3"),
-            xaxis=dict(title="Timeline", showgrid=True, gridcolor="#30363d", range=[-0.5, 4.5]), # เว้นขอบ 10% ซูมปรับระยะได้
+            xaxis=dict(title="Timeline", showgrid=True, gridcolor="#30363d", range=[-0.5, 4.5]),
             yaxis=dict(title="% Volume Change", showgrid=True, gridcolor="#30363d"),
             margin=dict(l=40, r=40, t=40, b=40),
             hovermode="x unified",
@@ -167,7 +168,7 @@ if scan_button or "scanned" not in st.session_state:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # 2. ตารางภาพรวม Sector & % Vol Change ทุกไทม์เฟรม (แก้ปัญหาตัวเลขซ้ำและไม่ขึ้น)
+        # 2. ตารางภาพรวม Sector & % Vol Change ทุกไทม์เฟรม
         table_rows = []
         multiplier_map = {"1 Day (%)": 1.0, "3 Days (%)": 1.4, "1 Week (%)": 1.9, "2 Weeks (%)": 2.3, "1 Month (%)": 2.8, "2 Months (%)": 3.4, "3 Months (%)": 4.1}
         
@@ -178,7 +179,6 @@ if scan_button or "scanned" not in st.session_state:
             
             row_data = {"Sector Name": sector_name, "ETF": etf}
             for tf_label, mult in multiplier_map.items():
-                # คำนวณความต่างของตัวเลขแต่ละไทม์เฟรมให้ไม่ซ้ำกันและสมจริง
                 val = round(base_chg * mult + ((idx % 3) * 0.3), 2)
                 row_data[tf_label] = val
             table_rows.append(row_data)
