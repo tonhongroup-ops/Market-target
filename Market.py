@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import plotly.express as px
 from datetime import datetime
 
 # --- ตั้งค่าหน้าจอ Streamlit (Config) ---
@@ -22,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
-st.markdown("เรดาร์สแกนกระแสเงินทุนครบเครื่อง: ตารางครบทุกช่วงเวลา + ฟิลเตอร์สรุปตัวแกร่ง + กราฟรวมทุกสินทรัพย์เทียบสเกล % (+/-) เปิดปิดเส้นได้อิสระ")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุนครบเครื่อง: ตารางครบทุกช่วงเวลา + ฟิลเตอร์สรุปตัวแกร่ง + กราฟ Plotly Interactive ซูมขยายและกดเปิด-ปิดเส้นได้อิสระ")
 
 # --- รวบรวม Sector, Innovation, SET100 ตัวแทน, Gold, Bitcoin ---
 radar_assets = {
@@ -48,7 +49,6 @@ def fetch_and_normalize_radar(assets_dict):
     
     for name, symbol in assets_dict.items():
         try:
-            # ดึงข้อมูลทีละตัวด้วยรอบที่เสถียรขึ้น
             df = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
             if df is not None and not df.empty:
                 if isinstance(df.columns, pd.MultiIndex):
@@ -78,7 +78,6 @@ def fetch_and_normalize_radar(assets_dict):
                             v_2w = float(((vol.iloc[-10:].mean() - vol_sma20.iloc[-10:].mean()) / vol_sma20.iloc[-10:].mean()) * 100)
                             v_1m = float(((vol.iloc[-20:].mean() - vol_sma20.iloc[-20:].mean()) / vol_sma20.iloc[-20:].mean()) * 100)
                             
-                            # ป้องกันค่า NaN หรือ Infinite
                             table_data.append({
                                 "Sector / Asset": name,
                                 "Latest (%)": round(v_latest, 2) if not np.isnan(v_latest) else 0.0,
@@ -91,7 +90,7 @@ def fetch_and_normalize_radar(assets_dict):
                             if v_1w > 0 and price_score > 0 and "Gold" not in name and "Bitcoin" not in name:
                                 total_score = v_1w + price_score
                                 scored_assets.append({"name": name, "score": total_score})
-        except Exception as e:
+        except Exception:
             continue
             
     scored_assets = sorted(scored_assets, key=lambda x: x['score'], reverse=True)
@@ -117,36 +116,52 @@ st.markdown("### 📊 ตารางเปรียบเทียบ % Volume 
 if not df_result.empty:
     st.dataframe(df_result, use_container_width=True, hide_index=True)
     
-    # --- 3. กราฟรวมทุกสินทรัพย์ พร้อมเปิด/ปิดเส้นได้เอง และสเกล % (+/-) ---
+    # --- 3. กราฟ Plotly Interactive (ซูมได้, เลื่อนช่วงเวลาได้, คลิกเปิด-ปิดเส้นได้) ---
     st.markdown("---")
-    st.markdown("### 📈 กราฟเปรียบเทียบทุกสินทรัพย์ร่วมกัน (Normalized % Performance สเกล +/- แกน Y)")
+    st.markdown("### 📈 กราฟเปรียบเทียบทุกสินทรัพย์ (Plotly Interactive: ซูมขยาย / คลิกชื่อด้านล่างเพื่อซ่อน-แสดง)")
     
     if price_normalized:
         df_norm = pd.DataFrame(price_normalized)
         
         if not df_norm.empty:
-            default_selected = [k for k in radar_assets.keys() if k in df_norm.columns][:5]
-            selected_assets_for_chart = st.multiselect(
-                "🎛️ ติ๊กเลือก / เอาออก เพื่อเปิด-ปิดเส้นในกราฟ:",
-                options=list(df_norm.columns),
-                default=default_selected
+            df_norm_reset = df_norm.reset_index()
+            date_col = df_norm_reset.columns[0]
+            df_melted = df_norm_reset.melt(id_vars=[date_col], var_name="Asset", value_name="Performance (%)")
+            
+            fig = px.line(
+                df_melted, 
+                x=date_col, 
+                y="Performance (%)", 
+                color="Asset",
+                markers=False
             )
             
-            if selected_assets_for_chart:
-                last_date = df_norm.index[-1]
-                total_days = (df_norm.index[-1] - df_norm.index[0]).days
-                padding_days = max(int(total_days * 0.10), 5) 
-                future_end_date = last_date + pd.Timedelta(days=padding_days)
-                
-                future_index = pd.date_range(start=last_date + pd.Timedelta(days=1), end=future_end_date, freq='B')
-                df_padded = pd.DataFrame(index=df_norm.index.union(future_index))
-                df_combined = df_padded.join(df_norm[selected_assets_for_chart]).ffill() 
-                
-                st.line_chart(df_combined, use_container_width=True)
-                st.caption("💡 กราฟแสดงผลตอบแทนสะสม (%) เทียบจากจุดเริ่มต้น โดยมีแกน 0 เป็นเส้นกึ่งกลาง ทำให้เห็นความชัน (Slope) พุ่งขึ้น (+) หรือดิ่งลง (-) ของแต่ละตัวได้ชัดเจน พร้อมเว้นพื้นที่ขวา 10%")
-            else:
-                st.info("👈 กรุณาเลือกอย่างน้อย 1 สินทรัพย์จากกล่องด้านบนเพื่อแสดงกราฟ")
+            fig.update_layout(
+                paper_bgcolor="#0b0f19",
+                plot_bgcolor="#161b22",
+                font_color="#e6edf3",
+                xaxis=dict(
+                    showgrid=True, 
+                    gridcolor="#30363d",
+                    rangeslider=dict(visible=False),
+                    type="date"
+                ),
+                yaxis=dict(
+                    showgrid=True, 
+                    gridcolor="#30363d", 
+                    zeroline=True, 
+                    zerolinecolor="#8b949e", 
+                    zerolinewidth=2
+                ),
+                legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+                margin=dict(l=20, r=20, t=30, b=60),
+                height=580,
+                hovermode="x unified"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True, 'scrollZoom': True})
+            st.caption("💡 มึงสามารถใช้เมาส์ลากครอบ (Box Zoom) หรือเลื่อนช่วงเวลาเพื่อซูมดูข้อมูลได้อิสระ คลิกที่ชื่อ Sector ด้านล่างเพื่อซ่อน/แสดงเส้นได้ตามใจชอบ")
 
 else:
-    st.warning("⚠️ กำลังดึงข้อมูลจากตลาด ลองกดรีเฟรชที่เบราว์เซอร์อีกทีเพื่อน รอบนี้มารับรองไม่หลุด!")
+    st.warning("⚠️ กำลังดึงข้อมูลจากตลาด ลองกดรีเฟรชที่เบราว์เซอร์อีกทีเพื่อน รอบนี้ครบถ้วนสมบูรณ์แบบแน่นอน!")
     
