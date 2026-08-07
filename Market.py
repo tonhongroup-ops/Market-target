@@ -22,13 +22,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุนครบเครื่อง ทั้งตารางข้อมูลย้อนหลังทุกช่วงเวลา กล่องฟิลเตอร์สรุปตัวแกร่ง และกราฟเลือกดูรายตัวแบบเว้นพื้นที่ขวา 10%")
+st.markdown("เรดาร์สแกนกระแสเงินทุนครบเครื่อง: ตารางครบทุกช่วงเวลา + ฟิลเตอร์สรุปตัวแกร่ง + กราฟรวมทุกสินทรัพย์เทียบสเกล % (+/-) เปิดปิดเส้นได้อิสระ")
 
-# --- รวบรวมทุก Sector และสินทรัพย์พิเศษ ---
+# --- รวบรวม Sector, Innovation, SET100 ตัวแทน, Gold, Bitcoin ---
 radar_assets = {
     "Technology & AI (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
-    "Financials (XLF)": "XLF",
     "Healthcare / Biotech (XLV)": "XLV",
     "Industrials & Smart Grid (XLI)": "XLI",
     "Consumer Discretionary (XLY)": "XLY",
@@ -36,14 +35,15 @@ radar_assets = {
     "Energy & Clean Tech (XLE)": "XLE",
     "Advanced Materials (XLB)": "XLB",
     "Utilities (XLU)": "XLU",
+    "SET100 Index (SET.BK)": "^SET.BK",
     "Gold / Safe Haven (GC=F)": "GC=F",
     "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
-def fetch_complete_radar_data(assets_dict):
+def fetch_and_normalize_radar(assets_dict):
     table_data = []
-    historical_prices = {} 
+    normalized_prices = {} 
     scored_assets = []
     
     for name, symbol in assets_dict.items():
@@ -56,7 +56,10 @@ def fetch_complete_radar_data(assets_dict):
                 if 'Close' in df.columns:
                     close_series = df['Close'].dropna()
                     if not close_series.empty:
-                        historical_prices[name] = close_series
+                        # แปลงราคาให้อยู่ในรูป % Change จากจุดเริ่มต้น (Normalized ให้จุดแรกเริ่มที่ 0% หรือเทียบสเกล +/- ได้ทันที)
+                        # หรือใช้สูตรเทียบกับราคาปิดวันแรกในช่วงเวลา เพื่อให้เห็นความชันบวก/ลบชัดเจน
+                        pct_change_series = ((close_series - close_series.iloc[0]) / close_series.iloc[0]) * 100
+                        normalized_prices[name] = pct_change_series
                         
                         # คำนวณความแข็งแกร่งเทียบ SMA20
                         sma20 = close_series.rolling(window=20).mean().iloc[-1]
@@ -67,9 +70,6 @@ def fetch_complete_radar_data(assets_dict):
                     vol = df['Volume'].dropna()
                     if len(vol) >= 70:
                         vol_sma20 = vol.rolling(window=20).mean()
-                        vol_sma40 = vol.rolling(window=40).mean()
-                        vol_sma60 = vol.rolling(window=60).mean()
-                        
                         v_latest = float(((vol.iloc[-1] - vol_sma20.iloc[-1]) / vol_sma20.iloc[-1]) * 100)
                         v_3d = float(((vol.iloc[-3:].mean() - vol_sma20.iloc[-3:].mean()) / vol_sma20.iloc[-3:].mean()) * 100)
                         v_1w = float(((vol.iloc[-5:].mean() - vol_sma20.iloc[-5:].mean()) / vol_sma20.iloc[-5:].mean()) * 100)
@@ -89,8 +89,8 @@ def fetch_complete_radar_data(assets_dict):
                             "3 Months (%)": round(v_3m, 2)
                         })
                         
-                        # กรองตัวที่แข็งแกร่ง (Volume สัปดาห์นี้เป็นบวก + ราคาอยู่เหนือเส้นค่าเฉลี่ย)
-                        if v_1w > 0 and price_score > 0:
+                        # กรองตัวที่แข็งแกร่ง
+                        if v_1w > 0 and price_score > 0 and "Gold" not in name and "Bitcoin" not in name:
                             total_score = v_1w + price_score
                             scored_assets.append({"name": name, "score": total_score})
                             
@@ -98,11 +98,11 @@ def fetch_complete_radar_data(assets_dict):
             continue
             
     scored_assets = sorted(scored_assets, key=lambda x: x['score'], reverse=True)
-    return pd.DataFrame(table_data), historical_prices, scored_assets
+    return pd.DataFrame(table_data), normalized_prices, scored_assets
 
-# รันฟังก์ชันดึงข้อมูล
-with st.spinner('กำลังเชื่อมต่อข้อมูลตลาดและประมวลผลเรดาร์...'):
-    df_result, price_data, strong_picks = fetch_complete_radar_data(radar_assets)
+# รันฟังก์ชัน
+with st.spinner('กำลังประมวลผลข้อมูลตลาดทั้งหมด...'):
+    df_result, price_normalized, strong_picks = fetch_and_normalize_radar(radar_assets)
 
 # --- 1. กล่องสรุปผลคัดกรองตัวที่แข็งแกร่งที่สุดอัตโนมัติ ---
 st.markdown("### 🎯 ตัวที่น่าสนใจและแข็งแกร่งที่สุดในรอบนี้ (Filtered Strong Picks)")
@@ -115,35 +115,44 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 2. ตารางข้อมูล Volume Change ทุกช่วงเวลาแบบจัดเต็ม ---
-st.markdown("### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา (เทียบกับค่าเฉลี่ยปกติ)")
+# --- 2. ตารางข้อมูล Volume Change ทุกช่วงเวลา ---
+st.markdown("### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา")
 if not df_result.empty:
     st.dataframe(df_result, use_container_width=True, hide_index=True)
     
-    # --- 3. กราฟเลือกดูรายตัว พร้อมเว้นพื้นที่ขวา 10% ---
+    # --- 3. กราฟรวมทุกสินทรัพย์ พร้อมเปิด/ปิดเส้นได้เอง และสเกล % (+/-) ---
     st.markdown("---")
-    st.markdown("### 📈 กราฟเส้นแนวโน้มราคา (Trend Line & Future Padding View)")
+    st.markdown("### 📈 กราฟเปรียบเทียบทุกสินทรัพย์ร่วมกัน (Normalized % Performance สเกล +/- แกน Y)")
     
-    if price_data:
-        selected_chart_asset = st.selectbox("เลือก Sector หรือสินทรัพย์เพื่อดูเส้นแนวโน้ม:", list(price_data.keys()))
+    if price_normalized:
+        df_norm = pd.DataFrame(price_normalized)
         
-        if selected_chart_asset in price_data:
-            target_series = price_data[selected_chart_asset].dropna()
+        if not df_norm.empty:
+            # ให้มึงเลือกเปิด/ปิดเส้นราย Sector / Asset ได้เองตามใจชอบ (ค่าเริ่มต้นเลือกตัวหลักๆ ไว้ให้)
+            default_selected = [k for k in radar_assets.keys() if k in df_norm.columns][:5]
+            selected_assets_for_chart = st.multiselect(
+                "🎛️ ติ๊กเลือก / เอาออก เพื่อเปิด-ปิดเส้นในกราฟ:",
+                options=list(df_norm.columns),
+                default=default_selected
+            )
             
-            if not target_series.empty:
-                last_date = target_series.index[-1]
-                total_days = (target_series.index[-1] - target_series.index[0]).days
+            if selected_assets_for_chart:
+                # จัดการเรื่องเว้นพื้นที่ว่างขวา 10%
+                last_date = df_norm.index[-1]
+                total_days = (df_norm.index[-1] - df_norm.index[0]).days
                 padding_days = max(int(total_days * 0.10), 5) 
                 future_end_date = last_date + pd.Timedelta(days=padding_days)
                 
                 future_index = pd.date_range(start=last_date + pd.Timedelta(days=1), end=future_end_date, freq='B')
-                df_padded = pd.DataFrame(index=target_series.index.union(future_index))
-                df_padded[selected_chart_asset] = target_series
-                df_combined = df_padded.ffill()
+                df_padded = pd.DataFrame(index=df_norm.index.union(future_index))
+                df_combined = df_padded.join(df_norm[selected_assets_for_chart]).ffill() 
                 
-                st.line_chart(df_combined[selected_chart_asset], use_container_width=True)
-                st.caption(f"💡 กราฟแสดงราคาของ {selected_chart_asset} ย้อนหลัง พร้อมเว้นพื้นที่ว่างทางขวา 10% สำหรับประเมินทิศทาง Smart Money")
+                # พล้อตกราฟรวมที่แปลงเป็น % Change (แกน Y มี 0 เป็นจุดกึ่งกลาง วิ่งบวกและลบเห็นความชันชัดเจน)
+                st.line_chart(df_combined, use_container_width=True)
+                st.caption("💡 กราฟแสดงผลตอบแทนสะสม (%) เทียบจากจุดเริ่มต้น โดยมีแกน 0 เป็นเส้นกึ่งกลาง ทำให้เห็นความชัน (Slope) พุ่งขึ้น (+) หรือดิ่งลง (-) ของแต่ละตัวได้ชัดเจน พร้อมเว้นพื้นที่ขวา 10% สำรวจอนาคต")
+            else:
+                st.info("👈 กรุณาเลือกอย่างน้อย 1 สินทรัพย์จากกล่องด้านบนเพื่อแสดงกราฟ")
 
 else:
     st.warning("⚠️ กำลังเชื่อมต่อข้อมูลตลาด ลองกดรีเฟรชหน้าจออีกครั้งเพื่อน!")
-    ไ
+    
