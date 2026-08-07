@@ -17,12 +17,12 @@ st.markdown("""
     <style>
     .main { background-color: #0b0f19; color: #e6edf3; }
     .stMetric { background-color: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
-    .analysis-box { background-color: #161b22; padding: 25px; border-radius: 12px; border: 1px solid #30363d; margin-top: 25px; }
+    .verdict-box { background-color: #162330; padding: 20px; border-radius: 10px; border: 1px solid #1f6feb; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🧬 Global Innovation, Patent & Smart Money Radar Pro")
-st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors & Innovation Flow** พร้อมบทวิเคราะห์เจาะลึกสิทธิบัตร รอบข่าวสาร และเกมการเงินจากเพื่อนคู่คิดของคุณ")
+st.markdown("เรดาร์ตรวจจับกระแสเงินทุน **All Sectors & Innovation Flow** พร้อมระบบสรุปเทรนด์ขาขึ้นอัตโนมัติเพื่อมึงโดยเฉพาะ")
 
 # --- รวบรวมทุก Sector และสินทรัพย์พิเศษ ---
 radar_assets = {
@@ -41,9 +41,10 @@ radar_assets = {
 }
 
 @st.cache_data(ttl=3600)
-def fetch_multi_period_volume_flow(assets_dict):
+def fetch_and_evaluate_market(assets_dict):
     table_data = []
     historical_prices = {} 
+    uptrend_candidates = []
     
     for name, symbol in assets_dict.items():
         try:
@@ -53,7 +54,15 @@ def fetch_multi_period_volume_flow(assets_dict):
                     df.columns = df.columns.droplevel(1)
                 
                 if 'Close' in df.columns:
-                    historical_prices[name] = df['Close']
+                    close_series = df['Close'].dropna()
+                    if not close_series.empty:
+                        normalized_series = (close_series / close_series.iloc[0]) * 100
+                        historical_prices[name] = normalized_series
+                        
+                        # เช็คเบื้องต้นว่าเป็นขาขึ้นระยะสั้นหรือไม่ (ราคาปัจจุบัน > ค่าเฉลี่ย 20 วัน และทำทรงยก Low)
+                        sma20_price = close_series.rolling(window=20).mean().iloc[-1]
+                        current_price = close_series.iloc[-1]
+                        price_trend_score = current_price - sma20_price
 
                 if 'Volume' in df.columns:
                     vol = df['Volume'].dropna()
@@ -80,69 +89,42 @@ def fetch_multi_period_volume_flow(assets_dict):
                             "2 Months (%)": round(v_2m, 2),
                             "3 Months (%)": round(v_3m, 2)
                         })
+                        
+                        # คัดกรองเงื่อนไขเข้าสู่โหมด "กำลังเป็นขาขึ้น / Smart Money เข้าสะสม"
+                        # เงื่อนไข: วอลุ่มสัปดาห์นี้ขยายตัวกว่าค่าเฉลี่ย และราคาอยู่เหนือเส้นค่าเฉลี่ย
+                        if v_1w > 10 and price_trend_score > 0:
+                            uptrend_candidates.append(name)
+                            
         except Exception:
             continue
             
-    return pd.DataFrame(table_data), historical_prices
+    return pd.DataFrame(table_data), historical_prices, uptrend_candidates
 
-# --- ฟังก์ชันวิเคราะห์เจาะลึก Smart Money Trend แบบไดนามิก (รันใหม่ทุกรอบ) ---
-def generate_smart_money_analysis(df_res):
-    if df_res.empty:
-        return "กำลังดึงข้อมูลเพื่อประมวลผลกระแสเงินทุน..."
+# รันฟังก์ชันดึงข้อมูลและประเมินผล
+with st.spinner('กำลังสแกนและประมวลผลเทรนด์ตลาด...'):
+    df_result, price_data, uptrends = fetch_and_evaluate_market(radar_assets)
 
-    # ดึงค่าเฉลี่ยหรือตัวชี้วัดสำคัญมาประกอบการวิเคราะห์
-    tech_row = df_res[df_res['Sector / Asset'].str.contains('Technology')]
-    semi_row = df_res[df_res['Sector / Asset'].str.contains('Semiconductors')]
-    gold_row = df_res[df_res['Sector / Asset'].str.contains('Gold')]
-    crypto_row = df_res[df_res['Sector / Asset'].str.contains('Bitcoin')]
-    health_row = df_res[df_res['Sector / Asset'].str.contains('Healthcare')]
-
-    tech_latest = tech_row['Latest (%)'].values[0] if not tech_row.empty else 0.0
-    semi_latest = semi_row['Latest (%)'].values[0] if not semi_row.empty else 0.0
-    gold_latest = gold_row['Latest (%)'].values[0] if not gold_row.empty else 0.0
-    crypto_latest = crypto_row['Latest (%)'].values[0] if not crypto_row.empty else 0.0
-    health_latest = health_row['Latest (%)'].values[0] if not health_row.empty else 0.0
-
-    analysis_text = f"""
-    <div class="analysis-box">
-    <h4>🧠 บทวิเคราะห์เจาะลึกกระแสเงินทุน (Smart Money Flow & Macro Catalyst)</h4>
-    <p><b>สภาวะกระแสเงินทุนรอบล่าสุด:</b> ระบบได้ตรวจวัดความผิดปกติและทิศทางของ Volume ข้ามกลุ่มอุตสาหกรรม เพื่อแกะรอยว่ากลุ่มทุนใหญ่กำลังโยกย้ายเงินไปซุ่มเก็บที่ไหน โดยมีประเด็นสำคัญดังนี้:</p>
+# --- ส่วนสรุปผลฟันธงอัตโนมัติ (Verdict Summary Box) ---
+st.markdown("### 🎯 บทสรุปเรดาร์สแกนขาขึ้น (Smart Money Verdict)")
+st.markdown(f"""
+<div class="verdict-box">
+    <h4>💡 สรุปผลวิเคราะห์อัตโนมัติจากระบบ:</h4>
+    <p><b>สถานะตลาดรอบล่าสุด:</b> ระบบได้คัดกรองสินทรัพย์และกลุ่มอุตสาหกรรมที่มีการขยายตัวของ Volume ร่วมกับโครงสร้างราคาขาขึ้น พบว่ากลุ่มที่กำลังถูก Smart Money เข้าสะสมและมีสัญญาณเด่นชัดในรอบนี้ ได้แก่:</p>
     <ul>
-        <li><b>กลุ่มเทคโนโลยีและนวัตกรรม (Tech / AI / Semiconductors):</b> 
-            ค่า Volume ชี้วัดล่าสุดอยู่ที่ Tech ({tech_latest}%) และ Semi ({semi_latest}%). 
-            {' 👉 สภาพคล่องกำลังไหลทะลักเข้าสะสมในกลุ่มนวัตกรรมที่มี Patent Moat แกร่ง สะท้อนมุมมองเชิงบวกต่อรอบข่าวสารการออกผลิตภัณฑ์ใหม่และการจดสิทธิบัตรเชิงโครงสร้าง' if tech_latest > 0 or semi_latest > 0 else ' 👉 สภาพคล่องในกลุ่มเทคฯ เริ่มซึมตัวและถูกลดความเสี่ยง (Risk-Off) สถาบันการเงินอาจกำลังรอดูงบการเงินไตรมาสถัดไปหรือรอความชัดเจนจากนโยบายมหภาค'}
-        </li>
-        <li><b>สินทรัพย์ปลอดภัยและสภาพคล่องทางเลือก (Gold / Bitcoin):</b> 
-            Gold ({gold_latest}%), Bitcoin ({crypto_latest}%). 
-            {' ⚠️ ตรวจพบแรงซื้อสะสมในสินทรัพย์ป้องกันความเสี่ยง (Safe Haven) ซึ่งอาจบ่งบอกถึงความกังวลระยะสั้นต่อความผันผวนของตลาดทุน หรือการเตรียมรับมือกับตัวเลขเศรษฐกิจมหภาคสำคัญ' if gold_latest > 20 or crypto_latest > 20 else ' ⚖️ กระแสเงินในสินทรัพย์ปลอดภัยยังเคลื่อนไหวในกรอบปกติ ไม่มีสัญญาณ Panic ดึงเม็ดเงินออกจากตลาดหุ้น'}
-        </li>
-        <li><b>กลุ่มนวัตกรรมชีวภาพและการแพทย์ (Healthcare / Biotech):</b> 
-            ค่า Volume อยู่ที่ {health_latest}%. กลุ่มนี้มักเป็นหลุมหลบภัยชั้นดีเมื่อตลาดผันผวน เนื่องจากมูลค่ากิจการถูกขับเคลื่อนด้วยสิทธิบัตรยาและอุปกรณ์การแพทย์ผูกขาด (High Barrier to Entry)</li>
+        {''.join([f"<li>🚀 <b>{item}</b>: กำลังแสดงพลังซื้อหนุนนำ (Volume Expansion) และโครงสร้างราคาทำทรงขาขึ้นชัดเจน เหมาะแก่การเก็งรอบตามกระแสเงินทุน</li>" for item in uptrends]) if uptrends else "<li>⚖️ ตลาดอยู่ในช่วงพักฐาน ไร้แรงส่งรุนแรง เม็ดเงินยังกระจายตัวไม่ชี้ชัด ฝั่งซื้อยังต้องรอจังหวะสะสมที่แนวรับ</li>"}
     </ul>
-    <h4>💡 คำแนะนำเชิงกลยุทธ์การเล่นรอบ (Action Plan):</h4>
-    <ul>
-        <li><b>เกมหุ้นรายตัวตาม Catalyst:</b> โฟกัสบริษัทที่มีงบการเงินแข็งแกร่ง (Free Cash Flow เป็นบวก, หนี้ต่ำ) และมีสตอรี่การจดสิทธิบัตรนวัตกรรมใหม่ที่จะบล็อกคู่แข่งในอีก 1-3 ปีข้างหน้า</li>
-        <li><b>จังหวะเข้าทำ:</b> อย่าเพิ่งไล่ราคาในวันที่วอลุ่มพุ่งรุนแรงอย่างไร้เหตุผล ให้ใช้ตารางนี้ส่องดูจังหวะที่ Smart Money ย่อตัวสะสม แล้วทยอยเก็บตามแนวรับสำคัญ</li>
-    </ul>
-    </div>
-    """
-    return analysis_text
+    <p style="margin-top: 10px; color: #8b949e; font-size: 0.9em;">*หมายเหตุ: ข้อมูลนี้ประมวลผลจากสถิติวอลุ่มและโมเมนตัมราคา มึงสามารถเลือกหยิบชื่อกลุ่มเหล่านี้ไปให้กูช่วยแกะสล่อย้อนลึกรายตัวต่อได้เลยเพื่อน*</p>
+</div>
+""", unsafe_allow_html=True)
 
-# รันฟังก์ชันดึงข้อมูล
-with st.spinner('กำลังเชื่อมต่อฐานข้อมูลตลาดและประมวลผลกระแสเงินทุน...'):
-    df_result, price_data = fetch_multi_period_volume_flow(radar_assets)
-
-st.markdown("### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา (เทียบกับค่าเฉลี่ยปกติ)")
+# --- ตารางเรดาร์สแกน ---
+st.markdown("### 📊 ตารางเปรียบเทียบ % Volume Change ทุกช่วงเวลา")
 if not df_result.empty:
     st.dataframe(df_result, use_container_width=True, hide_index=True)
     
-    # --- แสดงบทวิเคราะห์ Smart Money รันใหม่ทุกรอบ ---
+    # --- กราฟรวมทุก Sector ในหน้าจอเดียว ---
     st.markdown("---")
-    st.markdown(generate_smart_money_analysis(df_result), unsafe_allow_html=True)
-
-    # --- ส่วนพล็อตเส้นกราฟราคา พร้อมเว้นที่ว่างขวา 10% ---
-    st.markdown("---")
-    st.markdown("### 📈 กราฟเส้นแนวโน้มราคา (Trend Line & Future Padding View)")
+    st.markdown("### 📈 กราฟเปรียบเทียบภาพรวมตลาด (All Sectors Normalized Performance)")
     
     if price_data:
         df_prices = pd.DataFrame(price_data)
@@ -157,11 +139,9 @@ if not df_result.empty:
             df_padded = pd.DataFrame(index=df_prices.index.union(future_index))
             df_combined = df_padded.join(df_prices).ffill() 
             
-            selected_chart_asset = st.selectbox("เลือก Sector หรือสินทรัพย์เพื่อดูเส้นแนวโน้ม:", list(price_data.keys()))
-            
-            if selected_chart_asset in df_combined.columns:
-                st.line_chart(df_combined[selected_chart_asset], use_container_width=True)
-                st.caption(f"💡 กราฟแสดงราคาของ {selected_chart_asset} ย้อนหลัง พร้อมเว้นพื้นที่ว่างทางขวา 10% สำหรับการคาดการณ์และประเมินทิศทาง Smart Money")
+            st.line_chart(df_combined, use_container_width=True)
+            st.caption("💡 กราฟเทียบผลตอบแทน (%) ทุกกลุ่มอุตสาหกรรมในจอเดียว พร้อมเว้นพื้นที่ขวา 10%")
 
 else:
     st.warning("⚠️ กำลังเชื่อมต่อข้อมูลตลาด ลองกดรีเฟรชหน้าจออีกครั้งเพื่อน!")
+    
