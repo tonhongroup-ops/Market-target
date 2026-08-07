@@ -3,122 +3,105 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
 
 # --- ตั้งค่าหน้าจอ ---
-st.set_page_config(page_title="Smart Money Sniper Pro", layout="wide")
+st.set_page_config(page_title="Innovation & Patent Smart Money Radar Pro", layout="wide")
 
-st.title("🎯 Smart Money Sniper: Innovation & Patent Radar")
-st.markdown("คัดเฉพาะตัวที่เงินไหลเข้า (High Accel Volume) + กราฟเส้นทึบ เว้นขวา 10% จบมุมมองโปร")
+st.title("🧬 Innovation, Patent & Smart Money Radar Pro")
+st.markdown("เรดาร์วิเคราะห์หุ้นนวัตกรรม สิทธิบัตร รอบข่าว และกระแสเงินสดระดับโปร")
 
+# --- กลุ่มสินทรัพย์และนวัตกรรมเชิงลึก ---
 radar_assets = {
     "Technology & AI (XLK)": "XLK",
-    "Semiconductors (SMH)": "SMH",
-    "Healthcare/Biotech (XLV)": "XLV",
-    "Industrials/Smart Grid (XLI)": "XLI",
+    "Semiconductors / Patent Moat (SMH)": "SMH",
+    "Healthcare / Biotech (XLV)": "XLV",
+    "Advanced Materials (XLB)": "XLB",
+    "Industrials / Smart Grid (XLI)": "XLI",
     "Consumer Discretionary (XLY)": "XLY",
-    "Energy & Clean Tech (XLE)": "XLE"
+    "SET100 Index (SET.BK)": "^SET.BK",
+    "Gold / Safe Haven (GC=F)": "GC=F",
+    "Bitcoin / Global Liquidity (BTC-USD)": "BTC-USD"
 }
 
 @st.cache_data(ttl=3600)
-def analyze_smart_money(assets_dict):
-    table_data = []
+def fetch_deep_analysis(assets):
     plot_data = {}
-    sniper_picks = []
+    fundamental_data = []
     
-    for name, symbol in assets_dict.items():
+    for name, symbol in assets.items():
         try:
-            df = yf.download(symbol, period="6mo", auto_adjust=True, progress=False)
-            if df is None or df.empty: 
-                continue
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period="6mo", auto_adjust=True)
+            if df.empty: continue
             
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.droplevel(1)
-                
-            if 'Close' not in df.columns or 'Volume' not in df.columns:
-                continue
-                
             close = df['Close'].dropna()
-            vol = df['Volume'].dropna()
-            
-            if len(close) < 30 or len(vol) < 30:
-                continue
-                
-            # กราฟเปรียบเทียบ %Performance (Normalizing จากจุดเริ่มต้น)
             perf = ((close - close.iloc[0]) / close.iloc[0]) * 100
             plot_data[name] = perf
             
-            # คำนวณ Smart Money Score (Volume Acceleration)
-            v_sma20 = vol.rolling(20).mean()
+            # ดึงข้อมูลพื้นฐานและงบคร่าวๆ มาสกัด (ถ้ามี)
+            info = ticker.info
+            pe = info.get('trailingPE', np.nan)
+            market_cap = info.get('marketCap', np.nan)
+            div_yield = info.get('dividendYield', 0)
+            div_pct = f"{div_yield * 100:.2f}%" if div_yield and not np.isnan(div_yield) else "N/A"
             
-            if pd.isna(v_sma20.iloc[-1]) or v_sma20.iloc[-1] == 0:
-                continue
-                
-            accel_1d = float(((vol.iloc[-1] - v_sma20.iloc[-1]) / v_sma20.iloc[-1]) * 100)
-            accel_3d = float(((vol.iloc[-3:].mean() - v_sma20.iloc[-3:].mean()) / v_sma20.iloc[-3:].mean()) * 100)
-            accel_1w = float(((vol.iloc[-5:].mean() - v_sma20.iloc[-5:].mean()) / v_sma20.iloc[-5:].mean()) * 100)
-            accel_3w = float(((vol.iloc[-15:].mean() - v_sma20.iloc[-15:].mean()) / v_sma20.iloc[-15:].mean()) * 100)
-            accel_1m = float(((vol.iloc[-20:].mean() - v_sma20.iloc[-20:].mean()) / v_sma20.iloc[-20:].mean()) * 100)
-            
-            table_data.append({
-                "Asset": name, 
-                "1D Accel (%)": round(accel_1d, 2), 
-                "3D Accel (%)": round(accel_3d, 2),
-                "1W Accel (%)": round(accel_1w, 2), 
-                "3W Accel (%)": round(accel_3w, 2), 
-                "1M Accel (%)": round(accel_1m, 2)
+            fundamental_data.append({
+                "Asset / Sector": name,
+                "Current Return (%)": round(perf.iloc[-1], 2),
+                "Trailing PE": round(pe, 2) if pe and not np.isnan(pe) else "N/A",
+                "Div Yield": div_pct,
+                "Market Cap (B$)": round(market_cap / 1e9, 2) if market_cap and not np.isnan(market_cap) else "N/A"
             })
-            
-            # เงื่อนไขคัดกรอง Smart Money (กรองให้แคบและคมขึ้น)
-            price_ma20 = close.rolling(20).mean().iloc[-1]
-            if accel_1d > 15 and accel_3d > 8 and close.iloc[-1] > price_ma20:
-                sniper_picks.append({"name": name, "score": round(accel_1d + accel_3d, 2)})
         except Exception:
             continue
+            
+    return plot_data, pd.DataFrame(fundamental_data)
 
-    return pd.DataFrame(table_data), plot_data, sniper_picks
+with st.spinner('กำลังเจาะลึกงบการเงินและคำนวณรอบกราฟ...'):
+    plot_data, df_fund = fetch_deep_analysis(radar_assets)
 
-# รันฟังก์ชันวิเคราะห์
-with st.spinner('กำลังสแกนหาจังหวะ Smart Money...'):
-    df_stats, plot_data, picks = analyze_smart_money(radar_assets)
+# --- 1. Executive Summary & Market Catalyst ---
+st.subheader("🎯 Smart Money & Innovation Catalyst Insight")
+st.markdown("""
+<div style="background-color:#162330; padding:20px; border-radius:10px; border-left: 5px solid #1f6feb; margin-bottom: 20px;">
+    <h4>💡 มุมมองวิเคราะห์เชิงลึก (Rotation & Patent Play):</h4>
+    <ul>
+        <li><b>Semiconductors & AI (SMH / XLK):</b> ยังเป็นหัวใจหลักของกระแสสิทธิบัตรและนวัตกรรมโลก เงินทุน (Smart Money) มักจะพักตัวระยะสั้นก่อนลากรอบใหญ่ตามข่าวออกผลิตภัณฑ์หรือผลประกอบการ</li>
+        <li><b>Healthcare / Biotech (XLV):</b> หลุมหลบภัยชั้นดีที่มี Patent Moat คุ้มครองสูง เหมาะกับการถือเล่นรอบเมื่อตลาดผันผวน</li>
+        <li><b>Macro Context:</b> เปรียบเทียบผลตอบแทนกับ Gold และ Bitcoin เพื่อเช็คสภาพคล่องโลกว่าไหลเข้าสินทรัพย์เสี่ยงหรือสินทรัพย์ปลอดภัย</li>
+    </ul>
+</div>
+""", unsafe_allow_html=True)
 
-# --- 1. แสดงผล Sniper Picks ---
-st.subheader("🚀 Smart Money Alert: ตัวที่เงินไหลเข้าหนักๆ")
-if picks:
-    for p in picks:
-        st.success(f"🎯 ตรวจพบกระแสเงินทุนหนาแน่นใน **{p['name']}** (Score: {p['score']}) — วอลุ่มเร่งตัวและราคายืนเหนือเส้นค่าเฉลี่ยแข็งแกร่ง")
-else:
-    st.info("💡 รอบนี้ยังไม่มี Sector ไหนเข้าเกณฑ์เร่งตัวแบบจัดเต็ม ตลาดอยู่ในโหมดรอดูสถานการณ์")
-
-# --- 2. กราฟเทพ (เส้นทึบ 100% + เว้นระยะขวา 10%) ---
-st.subheader("📈 Performance Comparison (Solid Lines & 10% Right Padding)")
+# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%, ซูมได้, กดปิดเส้นได้) ---
+st.subheader("📈 Performance & Trend Comparison (Interactive Pro Chart)")
 
 if plot_data:
     fig = go.Figure()
     
-    # วาดเส้นกราฟทีละตัว บังคับให้เป็นเส้นทึบ (dash='solid')
     for name, data in plot_data.items():
+        # เน้นเส้นกลุ่มนวัตกรรมให้หนาพิเศษ กลุ่มอื่นบางลง
+        is_innovation = any(x in name for x in ["XLK", "SMH", "XLV", "XLB"])
+        width = 3.0 if is_innovation else 1.5
+        
         fig.add_trace(go.Scatter(
             x=data.index, 
             y=data, 
             mode='lines', 
             name=name, 
-            line=dict(width=2.5, dash='solid')
+            line=dict(width=width, dash='solid')
         ))
 
-    # คำนวณช่วงเวลาเพื่อเว้นขวา 10% และตัดจบที่ตลาดปิด
+    # คำนวณช่วงเวลาเว้นขวา 10%
     first_key = list(plot_data.keys())[0]
     all_dates = plot_data[first_key].index
     last_date = all_dates[-1]
     start_date = all_dates[0]
-    
-    # คำนวณระยะเวลาเพิ่ม 10% ทางขวา
-    time_span = last_date - start_date
-    right_padding_date = last_date + (time_span * 0.1)
+    right_padding = last_date + ((last_date - start_date) * 0.1)
 
     fig.update_layout(
         xaxis=dict(
-            range=[start_date, right_padding_date],
+            range=[start_date, right_padding],
             showgrid=True,
             gridcolor="#30363d",
             type="date"
@@ -135,17 +118,16 @@ if plot_data:
         font_color="white",
         hovermode="x unified", 
         legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
-        height=550
+        height=600
     )
     
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True, 'scrollZoom': True})
-else:
-    st.warning("⚠️ ไม่พบข้อมูลกราฟในรอบนี้")
+    st.caption("💡 ทริค: คลิกที่ชื่อ Sector ด้านล่างเพื่อซ่อน/โชว์เส้น, ลากเมาส์ครอบเพื่อซูมดูช่วงเวลาข่าวออกได้เลย")
 
-# --- 3. ตารางข้อมูลแบบละเอียด ---
-st.subheader("📊 Volume Acceleration Table")
-if not df_stats.empty:
-    st.dataframe(df_stats, use_container_width=True, hide_index=True)
+# --- 3. ตารางงบการเงินและข้อมูลพื้นฐาน ---
+st.subheader("📊 Fundamental & Valuation Snapshot")
+if not df_fund.empty:
+    st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
 else:
-    st.info("กำลังโหลดข้อมูลตาราง...")
+    st.warning("กำลังดึงข้อมูลพื้นฐาน...")
     
