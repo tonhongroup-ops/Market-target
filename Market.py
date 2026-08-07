@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Smart Money Rotation & Innovation Radar Pro", layout="wide")
 
 st.title("🧬 Smart Money Rotation & Innovation Radar Pro")
-st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ตาราง %Vol Change ครบทุกไทม์เฟรม (ส่องจังหวะงบการเงินและสิทธิบัตร)")
+st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี (Accumulation vs Spike) + ตาราง %Vol Change ครบทุกไทม์เฟรมสำหรับสายเทคและสิทธิบัตร")
 
 # --- สินทรัพย์นวัตกรรม สิทธิบัตร และ SET100 ---
 radar_assets = {
@@ -28,7 +28,7 @@ def analyze_comprehensive_radar(assets):
     plot_data = {}
     matrix_data = []
     fundamental_data = []
-    rotation_signals = []
+    active_conditions = []
     
     for name, symbol in assets.items():
         try:
@@ -71,17 +71,22 @@ def analyze_comprehensive_radar(assets):
                 "Spread (1D vs 1M)": spread_short_vs_long
             })
             
-            # เช็คสัญญาณพิเศษ
+            # --- ตรวจสอบเงื่อนไข 2 กรณี (Accumulation vs Spike) ---
             price_ma20 = close.rolling(20).mean().iloc[-1]
-            if name == "SET100 Index (SET.BK)" and v_1d > 10 and spread_short_vs_long > 10:
-                rotation_signals.append({
+            
+            # กรณีที่ 2: Spike & Momentum (1D พุ่งกระฉาก, Spread ถ่างสูง)
+            if v_1d > 20 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
+                active_conditions.append({
+                    "type": "SPIKE",
                     "name": name,
-                    "msg": f"🚨 สัญญาณเงินเข้า SET100! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่างจากค่าเฉลี่ย 1 เดือน `{spread_short_vs_long}%`) จับตาการหมุนเงินกลับตลาดไทย!"
+                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคาตามรอบข่าว/งบการเงิน รีบตามน้ำด่วน!"
                 })
-            elif "XL" in symbol and v_1d > 15 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
-                rotation_signals.append({
+            # กรณีที่ 1: Accumulation (ระยะกลาง-ยาวเริ่มทยอยบวก, SET100 หรือ Sector ตั้งฐาน)
+            elif v_1m > 5 and v_2m > 0 and abs(spread_short_vs_long) < 10:
+                active_conditions.append({
+                    "type": "ACCUM",
                     "name": name,
-                    "msg": f"🔥 Smart Money โหมโรงใน **{name}** (1D Vol: `{v_1d}%`, Spread: `{spread_short_vs_long}%`)"
+                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m}%`, 2M: `{v_2m}%`) วอลุ่มค่อยๆ ซึมเข้าแบบไม่ตื่นตูม เหมาะกับการทยอยสะสมรอดอบประกาศงบหรือข่าวใหญ่"
                 })
 
             # 3. ข้อมูลพื้นฐาน
@@ -95,23 +100,28 @@ def analyze_comprehensive_radar(assets):
         except Exception:
             continue
             
-    return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), rotation_signals
+    return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), active_conditions
 
-with st.spinner('กำลังดึงข้อมูลและคำนวณตารางระยะยาว...'):
-    plot_data, df_matrix, df_fund, signals = analyze_comprehensive_radar(radar_assets)
+with st.spinner('กำลังวิเคราะห์โครงสร้าง Smart Money และเงื่อนไขตลาด...'):
+    plot_data, df_matrix, df_fund, conditions = analyze_comprehensive_radar(radar_assets)
 
-# --- 1. Rotation Alert ---
-st.subheader("🎯 Capital Rotation & Smart Money Alert")
-if signals:
-    for s in signals:
-        if "SET100" in s['name']:
-            st.error(s['msg'])
+# --- 1. Smart Money Condition Banner (สรุป 2 กรณีตามที่มึงสั่ง) ---
+st.subheader("🎯 Smart Money Executive Matrix (วิเคราะห์ 2 กรณีอัตโนมัติ)")
+if conditions:
+    # กรองแสดงเฉพาะตัวที่เด่นๆ เพื่อไม่ให้รกหน้าจอ
+    for c in conditions[:3]: 
+        if c["type"] == "SPIKE":
+            st.error(c["msg"])
         else:
-            st.success(s['msg'])
+            st.info(c["msg"])
 else:
-    st.info("💡 ตลาดอยู่ในโหมดทรงตัว ติดตามการประกาศงบและรอบข่าวสิทธิบัตรอย่างใกล้ชิด")
+    st.markdown("""
+    <div style="background-color:#162330; padding:15px; border-radius:8px; border-left: 4px solid #8b949e;">
+        💡 <b>สถานะตลาดปัจจุบัน:</b> อยู่ในช่วงรอดูท่าที (Consolidation) ไม่มีสินทรัพย์ไหนเข้าเกณฑ์ Spike หรือ Accumulation ชัดเจน รอจับตาวอลุ่มสัปดาห์นี้
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%, เอา Float ออกสะอาดเอี่ยม) ---
+# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%, ไร้ปุ่มลอยเกะกะ) ---
 st.subheader("📈 Performance Comparison (Clean Interactive Chart)")
 
 if plot_data:
@@ -134,14 +144,13 @@ if plot_data:
         hovermode="x unified", legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
         height=600
     )
-    # ซ่อน ModeBar และเครื่องมือลอยเกะกะทิ้งทั้งหมดตามที่สั่ง
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-# --- 3. ตาราง Volume Change ครบทุกระยะ (รวม 2M และ 3M ที่มึงต้องการ) ---
-st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M สำหรับเทียบรอบงบการเงิน)")
+# --- 3. ตาราง Volume Change ครบทุกระยะ (1D ถึง 3M) ---
+st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M สำหรับเทียบนัยยะงบการเงิน)")
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
-    st.caption("📌 **ทริควิเคราะห์:** ใช้ช่อง 2M และ 3M เทียบกับระยะสั้น (1D/3D) เพื่อดูว่าช่วงก่อนประกาศงบหรือหลังงบออก วอลุ่มสะสมหนาแน่นขึ้นหรือแผ่วลงขนาดไหน")
+    st.caption("📌 **ทริควิเคราะห์สไตล์โปร:** ใช้ช่อง 2M และ 3M ดูฐานวอลุ่มเดิมก่อนงบออก เทียบกับช่อง 1D และ Spread เพื่อเช็คว่าทุนกำลังซึมเข้า (Case 1) หรือกำลังระเบิดลากราคา (Case 2)")
 else:
     st.warning("กำลังประมวลผลตาราง...")
 
