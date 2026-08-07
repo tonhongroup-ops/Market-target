@@ -8,9 +8,9 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Smart Money Rotation & Innovation Radar Pro", layout="wide")
 
 st.title("🧬 Smart Money Rotation & Innovation Radar Pro")
-st.markdown("เรดาร์แกะรอยการหมุนเวียนเงินทุน (Capital Rotation) ระหว่างหุ้นนวัตกรรมโลกและ SET100 ด้วยความห่างของ %Vol Change")
+st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ตาราง %Vol Change ครบทุกไทม์เฟรม (ส่องจังหวะงบการเงินและสิทธิบัตร)")
 
-# --- ดึง SET100 กลับมาเทียบ เพื่อเช็คจังหวะเงินไหลเข้าตลาดไทย ---
+# --- สินทรัพย์นวัตกรรม สิทธิบัตร และ SET100 ---
 radar_assets = {
     "Technology & AI (XLK)": "XLK",
     "Semiconductors / Patent Moat (SMH)": "SMH",
@@ -24,7 +24,7 @@ radar_assets = {
 }
 
 @st.cache_data(ttl=3600)
-def analyze_capital_rotation(assets):
+def analyze_comprehensive_radar(assets):
     plot_data = {}
     matrix_data = []
     fundamental_data = []
@@ -39,13 +39,13 @@ def analyze_capital_rotation(assets):
                 
             close = df['Close'].dropna()
             vol = df['Volume'].dropna()
-            if len(close) < 30 or len(vol) < 30: continue
+            if len(close) < 60 or len(vol) < 60: continue
                 
             # 1. กราฟเส้น %Performance
             perf = ((close - close.iloc[0]) / close.iloc[0]) * 100
             plot_data[name] = perf
             
-            # 2. คำนวณ % Volume Change เทียบค่าเฉลี่ย 20 วัน
+            # 2. คำนวณ % Volume Change เทียบค่าเฉลี่ย 20 วัน ครบทุกระยะ (1D, 3D, 1W, 3W, 1M, 2M, 3M)
             v_sma20 = vol.rolling(20).mean()
             if pd.isna(v_sma20.iloc[-1]) or v_sma20.iloc[-1] == 0: continue
                 
@@ -54,10 +54,10 @@ def analyze_capital_rotation(assets):
             v_1w = float(((vol.iloc[-5:].mean() - v_sma20.iloc[-5:].mean()) / v_sma20.iloc[-5:].mean()) * 100)
             v_3w = float(((vol.iloc[-15:].mean() - v_sma20.iloc[-15:].mean()) / v_sma20.iloc[-15:].mean()) * 100)
             v_1m = float(((vol.iloc[-20:].mean() - v_sma20.iloc[-20:].mean()) / v_sma20.iloc[-20:].mean()) * 100)
+            v_2m = float(((vol.iloc[-40:].mean() - v_sma20.iloc[-40:].mean()) / v_sma20.iloc[-40:].mean()) * 100)
+            v_3m = float(((vol.iloc[-60:].mean() - v_sma20.iloc[-60:].mean()) / v_sma20.iloc[-60:].mean()) * 100)
             
-            # คำนวณความห่าง (Spread) ระหว่าง 1D กับ 1M เพื่อดูว่าวอลุ่มพึ่งมากระชากไหม
             spread_short_vs_long = round(v_1d - v_1m, 2)
-            spread_acceleration = round(v_3d - v_1w, 2)
             
             matrix_data.append({
                 "Asset / Sector": name,
@@ -66,16 +66,17 @@ def analyze_capital_rotation(assets):
                 "1W (%)": round(v_1w, 2),
                 "3W (%)": round(v_3w, 2),
                 "1M (%)": round(v_1m, 2),
-                "Spread (1D vs 1M)": spread_short_vs_long,
-                "Momentum Delta": spread_acceleration
+                "2M (%)": round(v_2m, 2),
+                "3M (%)": round(v_3m, 2),
+                "Spread (1D vs 1M)": spread_short_vs_long
             })
             
-            # เช็คสัญญาณพิเศษสำหรับ SET100 หรือสินทรัพย์อื่นๆ
+            # เช็คสัญญาณพิเศษ
             price_ma20 = close.rolling(20).mean().iloc[-1]
             if name == "SET100 Index (SET.BK)" and v_1d > 10 and spread_short_vs_long > 10:
                 rotation_signals.append({
                     "name": name,
-                    "msg": f"🚨 สัญญาณเงินเข้า SET100! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่างจากค่าเฉลี่ย 1 เดือน `{spread_short_vs_long}%`) จับตาการหมุนเงิน (Rotation) กลับตลาดไทย!"
+                    "msg": f"🚨 สัญญาณเงินเข้า SET100! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่างจากค่าเฉลี่ย 1 เดือน `{spread_short_vs_long}%`) จับตาการหมุนเงินกลับตลาดไทย!"
                 })
             elif "XL" in symbol and v_1d > 15 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
                 rotation_signals.append({
@@ -96,27 +97,26 @@ def analyze_capital_rotation(assets):
             
     return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), rotation_signals
 
-with st.spinner('กำลังประมวลผลระบบ Capital Rotation...'):
-    plot_data, df_matrix, df_fund, signals = analyze_capital_rotation(radar_assets)
+with st.spinner('กำลังดึงข้อมูลและคำนวณตารางระยะยาว...'):
+    plot_data, df_matrix, df_fund, signals = analyze_comprehensive_radar(radar_assets)
 
 # --- 1. Rotation Alert ---
 st.subheader("🎯 Capital Rotation & Smart Money Alert")
 if signals:
     for s in signals:
         if "SET100" in s['name']:
-            st.error(s['msg']) # แจ้งเตือนสีแดงเด่นๆ ถ้าเงินเข้าตลาดไทย
+            st.error(s['msg'])
         else:
             st.success(s['msg'])
 else:
-    st.info("💡 ตลาดอยู่ในโหมดทรงตัว ยังไม่มีกระแสเงินโยกย้ายข้ามสินทรัพย์ครั้งใหญ่")
+    st.info("💡 ตลาดอยู่ในโหมดทรงตัว ติดตามการประกาศงบและรอบข่าวสิทธิบัตรอย่างใกล้ชิด")
 
-# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%) ---
-st.subheader("📈 Global Innovation vs SET100 & Safe Haven (Interactive Pro Chart)")
+# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%, เอา Float ออกสะอาดเอี่ยม) ---
+st.subheader("📈 Performance Comparison (Clean Interactive Chart)")
 
 if plot_data:
     fig = go.Figure()
     for name, data in plot_data.items():
-        # เน้นเส้นนวัตกรรมและ SET100 ให้ชัดเจน
         is_focus = any(x in name for x in ["XLK", "SMH", "SET100"])
         width = 3.0 if is_focus else 1.5
         fig.add_trace(go.Scatter(x=data.index, y=data, mode='lines', name=name, line=dict(width=width, dash='solid')))
@@ -134,13 +134,14 @@ if plot_data:
         hovermode="x unified", legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
         height=600
     )
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True, 'scrollZoom': True})
+    # ซ่อน ModeBar และเครื่องมือลอยเกะกะทิ้งทั้งหมดตามที่สั่ง
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-# --- 3. ตารางความห่าง %Vol Change Spread Matrix ---
-st.subheader("📊 Volume Spread Matrix (เช็คความห่าง 1D เทียบ 1M เพื่อดูการไหลของเงินทุน)")
+# --- 3. ตาราง Volume Change ครบทุกระยะ (รวม 2M และ 3M ที่มึงต้องการ) ---
+st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M สำหรับเทียบรอบงบการเงิน)")
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
-    st.caption("📌 **ทริควิเคราะห์:** สังเกตแถว `SET100 Index (SET.BK)` เทียบกับกลุ่มเทคต่างประเทศ ถ้าช่อง Spread ของไทยเริ่มบวกโดดขึ้นมาในขณะที่ฝั่งเทคติดลบ นั่นคือจังหวะที่เงินกำลังหมุน (Rotation) กลับเข้าบ้านเรา!")
+    st.caption("📌 **ทริควิเคราะห์:** ใช้ช่อง 2M และ 3M เทียบกับระยะสั้น (1D/3D) เพื่อดูว่าช่วงก่อนประกาศงบหรือหลังงบออก วอลุ่มสะสมหนาแน่นขึ้นหรือแผ่วลงขนาดไหน")
 else:
     st.warning("กำลังประมวลผลตาราง...")
 
@@ -148,4 +149,4 @@ else:
 st.subheader("📋 Fundamental & Valuation Snapshot")
 if not df_fund.empty:
     st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
-        
+    
