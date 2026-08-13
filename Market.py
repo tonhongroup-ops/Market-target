@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Smart Money Rotation & Innovation Radar Pro", layout="wide")
 
 st.title("🧬 Smart Money Rotation & Innovation Radar Pro")
-st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี (Accumulation vs Spike) + เจาะลึกงบการเงินและ Sector น่าเล่นฉบับเซียนหุ้นนวัตกรรม")
+st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี + เจาะลึกงบการเงิน สิทธิบัตร และภาพรวมตลาดฉบับเซียน")
 
 # --- สินทรัพย์นวัตกรรม สิทธิบัตร และ SET100 ---
 radar_assets = {
@@ -29,11 +29,12 @@ def analyze_comprehensive_radar(assets):
     matrix_data = []
     fundamental_data = []
     active_conditions = []
+    pe_trend_data = {}
     
     for name, symbol in assets.items():
         try:
             ticker = yf.Ticker(symbol)
-            df = ticker.history(period="6mo", auto_adjust=True)
+            df = ticker.history(period="1y", auto_adjust=True)
             if df.empty: continue
             if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.droplevel(1)
                 
@@ -45,7 +46,13 @@ def analyze_comprehensive_radar(assets):
             perf = ((close - close.iloc[0]) / close.iloc[0]) * 100
             plot_data[name] = perf
             
-            # 2. คำนวณ % Volume Change เทียบค่าเฉลี่ย 20 วัน ครบทุกระยะ (1D, 3D, 1W, 3W, 1M, 2M, 3M)
+            # จำลองแนวโน้ม P/E ย้อนหลัง
+            info = ticker.info
+            current_pe = info.get('trailingPE', np.nan)
+            if current_pe and not np.isnan(current_pe):
+                pe_trend_data[name] = current_pe * (close.iloc[-126:] / close.iloc[-1])
+
+            # 2. คำนวณ % Volume Change
             v_sma20 = vol.rolling(20).mean()
             if pd.isna(v_sma20.iloc[-1]) or v_sma20.iloc[-1] == 0: continue
                 
@@ -71,37 +78,40 @@ def analyze_comprehensive_radar(assets):
                 "Spread (1D vs 1M)": spread_short_vs_long
             })
             
-            # --- ตรวจสอบเงื่อนไข 2 กรณี (Accumulation vs Spike) ---
+            # --- ตรวจสอบเงื่อนไข 2 กรณี ---
             price_ma20 = close.rolling(20).mean().iloc[-1]
-            
             if v_1d > 20 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
                 active_conditions.append({
                     "type": "SPIKE",
                     "name": name,
-                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคาตามรอบข่าว/งบการเงิน รีบตามน้ำด่วน!"
+                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคา รีบตามน้ำด่วน!"
                 })
             elif v_1m > 5 and v_2m > 0 and abs(spread_short_vs_long) < 10:
                 active_conditions.append({
                     "type": "ACCUM",
                     "name": name,
-                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m}%`, 2M: `{v_2m}%`) วอลุ่มค่อยๆ ซึมเข้าแบบไม่ตื่นตูม เหมาะกับการทยอยสะสมรอดอบประกาศงบหรือข่าวใหญ่"
+                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m}%`, 2M: `{v_2m}%`) วอลุ่มค่อยๆ ซึมเข้า เหมาะกับการทยอยสะสมรอข่าวใหญ่"
                 })
 
             # 3. ข้อมูลพื้นฐาน
-            info = ticker.info
             pe = info.get('trailingPE', np.nan)
+            forward_pe = info.get('forwardPE', np.nan)
+            peg = info.get('pegRatio', np.nan)
+            
             fundamental_data.append({
                 "Asset / Sector": name,
                 "Current Return (%)": round(perf.iloc[-1], 2),
-                "Trailing PE": round(pe, 2) if pe and not np.isnan(pe) else "N/A"
+                "Trailing PE": round(pe, 2) if pe and not np.isnan(pe) else "N/A",
+                "Forward PE": round(forward_pe, 2) if forward_pe and not np.isnan(forward_pe) else "N/A",
+                "PEG Ratio": round(peg, 2) if peg and not np.isnan(peg) else "N/A"
             })
         except Exception:
             continue
             
-    return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), active_conditions
+    return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), active_conditions, pe_trend_data
 
-with st.spinner('กำลังวิเคราะห์โครงสร้าง Smart Money และเงื่อนไขตลาด...'):
-    plot_data, df_matrix, df_fund, conditions = analyze_comprehensive_radar(radar_assets)
+with st.spinner('กำลังวิเคราะห์โครงสร้าง Smart Money และตลาด...'):
+    plot_data, df_matrix, df_fund, conditions, pe_trends = analyze_comprehensive_radar(radar_assets)
 
 # --- 1. Smart Money Condition Banner ---
 st.subheader("🎯 Smart Money Executive Matrix (วิเคราะห์ 2 กรณีอัตโนมัติ)")
@@ -118,34 +128,23 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-# --- NEW: วิเคราะห์เจาะลึก Sector Valuation & Innovation Moat ฉบับเซียน ---
+# --- 2. Executive Intelligence & Market Summary (สรุปภาพรวมตลาดสไตล์เพื่อนซี้) ---
 st.markdown("---")
-st.subheader("🔬 Executive Intelligence: วิเคราะห์เจาะลึก Sector และหุ้นนวัตกรรม (สิทธิบัตร & งบการเงิน)")
-
+st.subheader("🔬 Market & Sector Intelligence: สรุปภาพรวมตลาดและเกมชิงสิทธิบัตรนวัตกรรม")
 st.markdown("""
 <div style="background-color:#0d1117; border:1px solid #30363d; padding:20px; border-radius:10px;">
-    <h4 style="color:#58a6ff; margin-top:0;">📊 สรุปภาพรวม Sector ที่น่าเล่นที่สุดตอนนี้ (อ้างอิงข้อมูล Valuation & EPS ล่าสุด)</h4>
-    <p>เพื่อน... จากข้อมูลการเปลี่ยนแปลงของกำไร (EPS Change) และความถูกแพงของ P/E ในตลาดตอนนี้ (ข้อมูล Bloomberg อัปเดต สอดยอดกับพอร์ตสาย Tech & Innovation ของเรา) กูสรุป 3 เซกเตอร์ที่น่าสนใจที่สุดดังนี้:</p>
+    <h4 style="color:#58a6ff; margin-top:0;">📊 บทวิเคราะห์ภาพรวมสมรภูมิการลงทุน (Macro & Sector Rotation)</h4>
+    <p>เพื่อน... ตลาดในช่วงกลางปี 2026 นี้กำลังอยู่ในจุดเปลี่ยนผ่านสำคัญ จากยุค "ไล่ซิ่งหุ้นเก็งกำไร" สู่ยุค <b>"ล่าหุ้นนวัตกรรมที่มี Patent Moat และงบการเงินเติบโตจริง (GAAP Profit)"</b> Smart Money กำลังเลือกข้างอย่างชัดเจน:</p>
     
     <ul>
-        <li><b>1. Information Technology & Semiconductors (XLK / SMH) — <i>"ของถูกในร่างยักษ์เติบโต"</i></b><br>
-            แม้ราคา YTD จะบวกขึ้นมาเด่นชัด แต่สังเกตมั้ยว่า <b>P/E Change ลดลงไปถึง -4.53</b> เพราะกำไร (EPS) โตระเบิดระเบอร์ถึง <b>+47.31%</b>! นี่คือลักษณะของหุ้นนวัตกรรมที่มี "Patent Moat" ชัดเจน กำไรโตเร็วกว่าราคาหุ้น ทำให้มูลค่าความแพง (Valuation) ลดลง <u><b>คำแนะนำ:</b> ย่อตัวคือโอกาสทองในการสะสมหุ้นกลุ่ม AI, หุ่นยนต์, และชิปโครงสร้างพื้นฐาน</u>
-        </li>
-        <li><b>2. Communication Services & Consumer Discretionary — <i>"หุ้นเติบโตซ่อนมูลค่า"</i></b><br>
-            กลุ่มนี้ EPS โตสูงระดับ <b>+26.64%</b> และ <b>+17.41%</b> แต่ P/E หดตัวลงหนักมาก (-4.39 และ -3.45) แสดงว่าตลาดยังกลัวความเสี่ยงระยะสั้น แต่ไส้ในงบการเงินแกร่งจริง <u><b>คำแนะนำ:</b> เหมาะกับการทยอยสะสมหุ้นแพลตฟอร์ม, สื่อสารความเร็วสูง, และระบบคลาวด์</u>
-        </li>
-        <li><b>3. Energy & Materials (XLB / XLI) — <i>"กลุ่มวัฏจักรที่ได้อานิสงส์ความต้องการใช้โครงสร้างพื้นฐาน"</i></b><br>
-            ด้วยอัตราการเติบโตของ EPS สูงถึง <b>+54.67%</b> (Energy) และ <b>+22.86%</b> (Materials) ทำให้ Valuation ถูกลงอย่างเห็นได้ชัด <u><b>คำแนะนำ:</b> เหมาะกับการเล่นรอบตามข่าวสิทธิบัตรวัสดุศาสตร์และพลังงานสะอาด</u>
-        </li>
+        <li><b>Information Technology & Semiconductors (XLK / SMH):</b> เกิดภาวะ <i>P/E Compression</i> อย่างชัดเจน กำไร (EPS) โตระเบิดสวนทางกับความถูกแพง Valuation เริ่มน่าสนใจเพราะได้อานิสงส์จาก AI และชิปโครงสร้างพื้นฐาน</li>
+        <li><b>Defense & Advanced Tech:</b> หุ้นกลุ่มที่ถือสิทธิบัตรเฉพาะทาง (เช่น ระบบสื่อสารไร้คนขับ โดรน หรือซอฟต์แวร์ความปลอดภัย) กลายเป็นเป้าหมายหลักในการสะสม เพราะคู่แข่งลอกเลียนแบบไม่ได้ (High Switching Cost)</li>
+        <li><b>กลยุทธ์การเล่นรอบ:</b> เลิกจมปลักกับหุ้นไร้อนาคต หันมาโฟกัสหุ้นที่มีกระสุนหนา (Cash Runway ยาว) และรอจังหวะที่วอลุ่มซึมเข้าสะสม (Accumulation Phase) ก่อนงบออกหรือก่อนข่าวสิทธิบัตรอนุมัติ!</li>
     </ul>
-    
-    <hr style="border-color:#30363d;">
-    <h4 style="color:#f0883e; margin-top:10px;">💡 มุมมองเพื่อนซี้ (Action Strategy สำหรับสายหุ้นนวัตกรรมและสิทธิบัตร):</h4>
-    <p>การเล่นหุ้นนวัตกรรมรอบนี้ อย่าดูแค่กราฟเทคนิคเดี่ยวๆ มึงต้องจับตาดู <b>"อัตราการเผาเงิน (Cash Runway)"</b> และ <b>"ความคืบหน้าของสิทธิบัตร (Patent Milestone)"</b> ควบคู่ไปด้วย ตัวไหนที่งบกำไรเริ่มพลิกเป็นบวกและ P/E เริ่มลดลงสวนทางกับราคา (ตามโมเดล Technology ด้านบน) ให้ใช้จังหวะ Volume Accumulation (Case 1) ทยอยเก็บเข้าพอร์ต แล้วรอจังหวะระเบิดของราคา (Case 2) เพื่อทำกำไรเป็นกอบเป็นกำ!</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 2. กราฟเทคนิค ---
+# --- 3. กราฟเทคนิค Performance ---
 st.markdown("---")
 st.subheader("📈 Performance Comparison (Clean Interactive Chart)")
 
@@ -171,16 +170,35 @@ if plot_data:
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-# --- 3. ตาราง Volume Change ครบทุกระยะ ---
-st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M สำหรับเทียบนัยยะงบการเงิน)")
+# --- 4. กราฟแสดงแนวโน้ม P/E ย้อนหลัง ---
+st.markdown("---")
+st.subheader("📉 Historical P/E Trend Analysis (วิเคราะห์แนวโน้มความถูก-แพง)")
+
+if pe_trends:
+    fig_pe = go.Figure()
+    for name, pe_series in pe_trends.items():
+        is_focus = any(x in name for x in ["XLK", "SMH"])
+        width = 2.5 if is_focus else 1.2
+        fig_pe.add_trace(go.Scatter(x=pe_series.index, y=pe_series, mode='lines', name=name, line=dict(width=width)))
+
+    fig_pe.update_layout(
+        xaxis=dict(showgrid=True, gridcolor="#30363d", type="date"),
+        yaxis=dict(title="Estimated P/E Multiple", showgrid=True, gridcolor="#30363d"),
+        plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white",
+        hovermode="x unified", legend=dict(orientation="h", yanchor="top", y=-0.25, xanchor="center", x=0.5),
+        height=500
+    )
+    st.plotly_chart(fig_pe, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
+
+# --- 5. ตาราง Volume Change ---
+st.markdown("---")
+st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M)")
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
-    st.caption("📌 **ทริควิเคราะห์สไตล์โปร:** ใช้ช่อง 2M และ 3M ดูฐานวอลุ่มเดิมก่อนงบออก เทียบกับช่อง 1D และ Spread เพื่อเช็คว่าทุนกำลังซึมเข้า (Case 1) หรือกำลังระเบิดลากราคา (Case 2)")
-else:
-    st.warning("กำลังประมวลผลตาราง...")
 
-# --- 4. ตารางพื้นฐาน ---
-st.subheader("📋 Fundamental & Valuation Snapshot")
+# --- 6. ตารางพื้นฐาน ---
+st.markdown("---")
+st.subheader("📋 Fundamental & Valuation Snapshot (Trailing PE, Forward PE, PEG)")
 if not df_fund.empty:
     st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
-            
+    
