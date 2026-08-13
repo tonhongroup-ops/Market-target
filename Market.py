@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Smart Money Rotation & Innovation Radar Pro", layout="wide")
 
 st.title("🧬 Smart Money Rotation & Innovation Radar Pro")
-st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี + เจาะลึกงบการเงิน สิทธิบัตร และภาพรวมตลาดฉบับเซียน")
+st.markdown("เรดาร์แกะรอยกระแสเงินทุน + วิเคราะห์แนวโน้ม P/E ตามช่วงไทม์เฟรมสำหรับหุ้นนวัตกรรมและสิทธิบัตร")
 
 # --- สินทรัพย์นวัตกรรม สิทธิบัตร และ SET100 ---
 radar_assets = {
@@ -46,10 +46,12 @@ def analyze_comprehensive_radar(assets):
             perf = ((close - close.iloc[0]) / close.iloc[0]) * 100
             plot_data[name] = perf
             
-            # จำลองแนวโน้ม P/E ย้อนหลัง
+            # ข้อมูลพื้นฐาน & P/E ปัจจุบัน
             info = ticker.info
             current_pe = info.get('trailingPE', np.nan)
+            
             if current_pe and not np.isnan(current_pe):
+                # จำลองเส้นแนวโน้ม P/E ย้อนหลัง
                 pe_trend_data[name] = current_pe * (close.iloc[-126:] / close.iloc[-1])
 
             # 2. คำนวณ % Volume Change
@@ -57,76 +59,46 @@ def analyze_comprehensive_radar(assets):
             if pd.isna(v_sma20.iloc[-1]) or v_sma20.iloc[-1] == 0: continue
                 
             v_1d = float(((vol.iloc[-1] - v_sma20.iloc[-1]) / v_sma20.iloc[-1]) * 100)
-            v_3d = float(((vol.iloc[-3:].mean() - v_sma20.iloc[-3:].mean()) / v_sma20.iloc[-3:].mean()) * 100)
-            v_1w = float(((vol.iloc[-5:].mean() - v_sma20.iloc[-5:].mean()) / v_sma20.iloc[-5:].mean()) * 100)
-            v_3w = float(((vol.iloc[-15:].mean() - v_sma20.iloc[-15:].mean()) / v_sma20.iloc[-15:].mean()) * 100)
             v_1m = float(((vol.iloc[-20:].mean() - v_sma20.iloc[-20:].mean()) / v_sma20.iloc[-20:].mean()) * 100)
             v_2m = float(((vol.iloc[-40:].mean() - v_sma20.iloc[-40:].mean()) / v_sma20.iloc[-40:].mean()) * 100)
-            v_3m = float(((vol.iloc[-60:].mean() - v_sma20.iloc[-60:].mean()) / v_sma20.iloc[-60:].mean()) * 100)
             
             spread_short_vs_long = round(v_1d - v_1m, 2)
             
             matrix_data.append({
                 "Asset / Sector": name,
                 "1D (%)": round(v_1d, 2),
-                "3D (%)": round(v_3d, 2),
-                "1W (%)": round(v_1w, 2),
-                "3W (%)": round(v_3w, 2),
                 "1M (%)": round(v_1m, 2),
-                "2M (%)": round(v_2m, 2),
-                "3M (%)": round(v_3m, 2),
                 "Spread (1D vs 1M)": spread_short_vs_long
             })
             
-            # --- ตรวจสอบเงื่อนไข 2 กรณี ---
-            price_ma20 = close.rolling(20).mean().iloc[-1]
-            if v_1d > 20 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
-                active_conditions.append({
-                    "type": "SPIKE",
-                    "name": name,
-                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d:.2f}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคา รีบตามน้ำด่วน!"
-                })
-            elif v_1m > 5 and v_2m > 0 and abs(spread_short_vs_long) < 10:
-                active_conditions.append({
-                    "type": "ACCUM",
-                    "name": name,
-                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m:.2f}%`, 2M: `{v_2m:.2f}%`) วอลุ่มค่อยๆ ซึมเข้า เหมาะกับการทยอยสะสมรอข่าวใหญ่"
-                })
+            # --- คำนวณ P/E ย้อนหลังตามไทม์เฟรม (3 เดือนที่แล้ว, 1 เดือนที่แล้ว, ปัจจุบัน) ---
+            pe_now = round(current_pe, 2) if current_pe and not np.isnan(current_pe) else "N/A"
+            pe_1m_ago = round(current_pe * (close.iloc[-20] / close.iloc[-1]), 2) if current_pe and not np.isnan(current_pe) else "N/A"
+            pe_3m_ago = round(current_pe * (close.iloc[-60] / close.iloc[-1]), 2) if current_pe and not np.isnan(current_pe) else "N/A"
 
-            # 3. ข้อมูลพื้นฐาน
-            pe = info.get('trailingPE', np.nan)
-            forward_pe = info.get('forwardPE', np.nan)
-            
             fundamental_data.append({
                 "Asset / Sector": name,
                 "Current Return (%)": round(perf.iloc[-1], 2),
-                "Trailing PE": round(pe, 2) if pe and not np.isnan(pe) else "N/A",
-                "Forward PE": round(forward_pe, 2) if forward_pe and not np.isnan(forward_pe) else "N/A"
+                "P/E (3M Ago)": pe_3m_ago,
+                "P/E (1M Ago)": pe_1m_ago,
+                "Trailing P/E (Now)": pe_now
             })
         except Exception:
             continue
             
     return plot_data, pd.DataFrame(matrix_data), pd.DataFrame(fundamental_data), active_conditions, pe_trend_data
 
-with st.spinner('กำลังวิเคราะห์โครงสร้าง Smart Money และตลาด...'):
+with st.spinner('กำลังโหลดข้อมูลเรดาร์และแกะรอย P/E ตามไทม์เฟรม...'):
     plot_data, df_matrix, df_fund, conditions, pe_trends = analyze_comprehensive_radar(radar_assets)
 
-# --- 1. Smart Money Condition Banner ---
-st.subheader("🎯 Smart Money Executive Matrix (วิเคราะห์ 2 กรณีอัตโนมัติ)")
-if conditions:
-    for c in conditions[:3]: 
-        if c["type"] == "SPIKE":
-            st.error(c["msg"])
-        else:
-            st.info(c["msg"])
-else:
-    st.markdown("""
-    <div style="background-color:#162330; padding:15px; border-radius:8px; border-left: 4px solid #8b949e;">
-        💡 <b>สถานะตลาดปัจจุบัน:</b> อยู่ในช่วงรอดูท่าที (Consolidation) ไม่มีสินทรัพย์ไหนเข้าเกณฑ์ Spike หรือ Accumulation ชัดเจน รอจับตาวอลุ่มสัปดาห์นี้
-    </div>
-    """, unsafe_allow_html=True)
+# --- 1. Banner อธิบายหลักการ ---
+st.markdown("""
+<div style="background-color:#162330; padding:15px; border-radius:8px; border-left: 4px solid #58a6ff;">
+    💡 <b>เทคนิคเซียนหุ้นรอบ:</b> ตารางด้านล่างเปรียบเทียบ <b>P/E ตามช่วงไทม์เฟรม (3M Ago -> 1M Ago -> Now)</b> ช่วยให้มึงเห็นว่าตัวไหนกำลังเกิดภาวะ P/E Compression (ราคาหุ้นนิ่งแต่กำไรโต ทำให้ P/E ลดลงเรื่อยๆ น่าสะสม) หรือกำลังพุ่งกระฉูดจากแรงเก็งกำไร!
+</div>
+""", unsafe_allow_html=True)
 
-# --- 2. Executive Intelligence & Market Summary (แก้บั๊ก HTML เป็น Markdown ปกติ) ---
+# --- 2. Executive Intelligence & Market Summary ---
 st.markdown("---")
 st.subheader("🔬 Market & Sector Intelligence: สรุปภาพรวมตลาดและเกมชิงสิทธิบัตรนวัตกรรม")
 st.markdown("""
@@ -165,7 +137,7 @@ if plot_data:
 
 # --- 4. กราฟแสดงแนวโน้ม P/E ย้อนหลัง ---
 st.markdown("---")
-st.subheader("📉 Historical P/E Trend Analysis (วิเคราะห์แนวโน้มความถูก-แพง)")
+st.subheader("📉 Historical P/E Trend Analysis (ดูกราฟเทียบ P/E แต่ละช่วงเวลา)")
 
 if pe_trends:
     fig_pe = go.Figure()
@@ -189,9 +161,9 @@ st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟร
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6. ตารางพื้นฐาน (แก้ปัญหาชื่อ Asset หาย) ---
+# --- 6. ตาราง P/E Timeline ตามช่วงไทม์เฟรม (โชว์ชื่อ Asset ครบถ้วน) ---
 st.markdown("---")
-st.subheader("📋 Fundamental & Valuation Snapshot (Trailing PE, Forward PE)")
+st.subheader("📋 P/E Timeline Analysis & Valuation Snapshot (เปรียบเทียบ P/E ตามไทม์เฟรม)")
 if not df_fund.empty:
     st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
     
