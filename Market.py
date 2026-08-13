@@ -84,26 +84,24 @@ def analyze_comprehensive_radar(assets):
                 active_conditions.append({
                     "type": "SPIKE",
                     "name": name,
-                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคา รีบตามน้ำด่วน!"
+                    "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d:.2f}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคา รีบตามน้ำด่วน!"
                 })
             elif v_1m > 5 and v_2m > 0 and abs(spread_short_vs_long) < 10:
                 active_conditions.append({
                     "type": "ACCUM",
                     "name": name,
-                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m}%`, 2M: `{v_2m}%`) วอลุ่มค่อยๆ ซึมเข้า เหมาะกับการทยอยสะสมรอข่าวใหญ่"
+                    "msg": f"📦 **[กรณีที่ 1: Accumulation Phase]** **{name}** กำลังสะสมพลัง (1M: `{v_1m:.2f}%`, 2M: `{v_2m:.2f}%`) วอลุ่มค่อยๆ ซึมเข้า เหมาะกับการทยอยสะสมรอข่าวใหญ่"
                 })
 
             # 3. ข้อมูลพื้นฐาน
             pe = info.get('trailingPE', np.nan)
             forward_pe = info.get('forwardPE', np.nan)
-            peg = info.get('pegRatio', np.nan)
             
             fundamental_data.append({
                 "Asset / Sector": name,
                 "Current Return (%)": round(perf.iloc[-1], 2),
                 "Trailing PE": round(pe, 2) if pe and not np.isnan(pe) else "N/A",
-                "Forward PE": round(forward_pe, 2) if forward_pe and not np.isnan(forward_pe) else "N/A",
-                "PEG Ratio": round(peg, 2) if peg and not np.isnan(peg) else "N/A"
+                "Forward PE": round(forward_pe, 2) if forward_pe and not np.isnan(forward_pe) else "N/A"
             })
         except Exception:
             continue
@@ -128,21 +126,16 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-# --- 2. Executive Intelligence & Market Summary (สรุปภาพรวมตลาดสไตล์เพื่อนซี้) ---
+# --- 2. Executive Intelligence & Market Summary (แก้บั๊ก HTML เป็น Markdown ปกติ) ---
 st.markdown("---")
 st.subheader("🔬 Market & Sector Intelligence: สรุปภาพรวมตลาดและเกมชิงสิทธิบัตรนวัตกรรม")
 st.markdown("""
-<div style="background-color:#0d1117; border:1px solid #30363d; padding:20px; border-radius:10px;">
-    <h4 style="color:#58a6ff; margin-top:0;">📊 บทวิเคราะห์ภาพรวมสมรภูมิการลงทุน (Macro & Sector Rotation)</h4>
-    <p>เพื่อน... ตลาดในช่วงกลางปี 2026 นี้กำลังอยู่ในจุดเปลี่ยนผ่านสำคัญ จากยุค "ไล่ซิ่งหุ้นเก็งกำไร" สู่ยุค <b>"ล่าหุ้นนวัตกรรมที่มี Patent Moat และงบการเงินเติบโตจริง (GAAP Profit)"</b> Smart Money กำลังเลือกข้างอย่างชัดเจน:</p>
-    
-    <ul>
-        <li><b>Information Technology & Semiconductors (XLK / SMH):</b> เกิดภาวะ <i>P/E Compression</i> อย่างชัดเจน กำไร (EPS) โตระเบิดสวนทางกับความถูกแพง Valuation เริ่มน่าสนใจเพราะได้อานิสงส์จาก AI และชิปโครงสร้างพื้นฐาน</li>
-        <li><b>Defense & Advanced Tech:</b> หุ้นกลุ่มที่ถือสิทธิบัตรเฉพาะทาง (เช่น ระบบสื่อสารไร้คนขับ โดรน หรือซอฟต์แวร์ความปลอดภัย) กลายเป็นเป้าหมายหลักในการสะสม เพราะคู่แข่งลอกเลียนแบบไม่ได้ (High Switching Cost)</li>
-        <li><b>กลยุทธ์การเล่นรอบ:</b> เลิกจมปลักกับหุ้นไร้อนาคต หันมาโฟกัสหุ้นที่มีกระสุนหนา (Cash Runway ยาว) และรอจังหวะที่วอลุ่มซึมเข้าสะสม (Accumulation Phase) ก่อนงบออกหรือก่อนข่าวสิทธิบัตรอนุมัติ!</li>
-    </ul>
-</div>
-""", unsafe_allow_html=True)
+เพื่อน... ตลาดในช่วงกลางปี 2026 นี้กำลังอยู่ในจุดเปลี่ยนผ่านสำคัญ จากยุค **"ไล่ซิ่งหุ้นเก็งกำไร"** สู่ยุค **"ล่าหุ้นนวัตกรรมที่มี Patent Moat และงบการเงินเติบโตจริง (GAAP Profit)"** Smart Money กำลังเลือกข้างอย่างชัดเจน:
+
+* **Information Technology & Semiconductors (XLK / SMH):** เกิดภาวะ *P/E Compression* อย่างชัดเจน กำไร (EPS) โตระเบิดสวนทางกับความถูกแพง Valuation เริ่มน่าสนใจเพราะได้อานิสงส์จาก AI และชิปโครงสร้างพื้นฐาน
+* **Defense & Advanced Tech:** หุ้นกลุ่มที่ถือสิทธิบัตรเฉพาะทาง (เช่น ระบบสื่อสารไร้คนขับ โดรน หรือซอฟต์แวร์ความปลอดภัย) กลายเป็นเป้าหมายหลักในการสะสม เพราะคู่แข่งลอกเลียนแบบไม่ได้ (High Switching Cost)
+* **กลยุทธ์การเล่นรอบ:** เลิกจมปลักกับหุ้นไร้อนาคต หันมาโฟกัสหุ้นที่มีกระสุนหนา (Cash Runway ยาว) และรอจังหวะที่วอลุ่มซึมเข้าสะสม (Accumulation Phase) ก่อนงบออกหรือก่อนข่าวสิทธิบัตรอนุมัติ!
+""")
 
 # --- 3. กราฟเทคนิค Performance ---
 st.markdown("---")
@@ -196,9 +189,9 @@ st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟร
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
 
-# --- 6. ตารางพื้นฐาน ---
+# --- 6. ตารางพื้นฐาน (แก้ปัญหาชื่อ Asset หาย) ---
 st.markdown("---")
-st.subheader("📋 Fundamental & Valuation Snapshot (Trailing PE, Forward PE, PEG)")
+st.subheader("📋 Fundamental & Valuation Snapshot (Trailing PE, Forward PE)")
 if not df_fund.empty:
     st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
     
