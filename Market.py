@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Smart Money Rotation & Innovation Radar Pro", layout="wide")
 
 st.title("🧬 Smart Money Rotation & Innovation Radar Pro")
-st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี (Accumulation vs Spike) + ตาราง %Vol Change ครบทุกไทม์เฟรมสำหรับสายเทคและสิทธิบัตร")
+st.markdown("เรดาร์แกะรอยกระแสเงินทุน (Capital Rotation) + ระบบวิเคราะห์ 2 กรณี (Accumulation vs Spike) + เจาะลึกงบการเงินและ Sector น่าเล่นฉบับเซียนหุ้นนวัตกรรม")
 
 # --- สินทรัพย์นวัตกรรม สิทธิบัตร และ SET100 ---
 radar_assets = {
@@ -74,14 +74,12 @@ def analyze_comprehensive_radar(assets):
             # --- ตรวจสอบเงื่อนไข 2 กรณี (Accumulation vs Spike) ---
             price_ma20 = close.rolling(20).mean().iloc[-1]
             
-            # กรณีที่ 2: Spike & Momentum (1D พุ่งกระฉาก, Spread ถ่างสูง)
             if v_1d > 20 and spread_short_vs_long > 15 and close.iloc[-1] > price_ma20:
                 active_conditions.append({
                     "type": "SPIKE",
                     "name": name,
                     "msg": f"🚨 **[กรณีที่ 2: Spike & Momentum]** ตรวจพบวอลุ่มระเบิดใน **{name}**! 1D Vol พุ่งไปที่ `{v_1d}%` (Spread ห่าง `{spread_short_vs_long}%`) — สัญญาณเงินก้อนใหญ่ไล่ล่าราคาตามรอบข่าว/งบการเงิน รีบตามน้ำด่วน!"
                 })
-            # กรณีที่ 1: Accumulation (ระยะกลาง-ยาวเริ่มทยอยบวก, SET100 หรือ Sector ตั้งฐาน)
             elif v_1m > 5 and v_2m > 0 and abs(spread_short_vs_long) < 10:
                 active_conditions.append({
                     "type": "ACCUM",
@@ -105,10 +103,9 @@ def analyze_comprehensive_radar(assets):
 with st.spinner('กำลังวิเคราะห์โครงสร้าง Smart Money และเงื่อนไขตลาด...'):
     plot_data, df_matrix, df_fund, conditions = analyze_comprehensive_radar(radar_assets)
 
-# --- 1. Smart Money Condition Banner (สรุป 2 กรณีตามที่มึงสั่ง) ---
+# --- 1. Smart Money Condition Banner ---
 st.subheader("🎯 Smart Money Executive Matrix (วิเคราะห์ 2 กรณีอัตโนมัติ)")
 if conditions:
-    # กรองแสดงเฉพาะตัวที่เด่นๆ เพื่อไม่ให้รกหน้าจอ
     for c in conditions[:3]: 
         if c["type"] == "SPIKE":
             st.error(c["msg"])
@@ -121,7 +118,35 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-# --- 2. กราฟเทคนิค (เส้นทึบหนา, เว้นขวา 10%, ไร้ปุ่มลอยเกะกะ) ---
+# --- NEW: วิเคราะห์เจาะลึก Sector Valuation & Innovation Moat ฉบับเซียน ---
+st.markdown("---")
+st.subheader("🔬 Executive Intelligence: วิเคราะห์เจาะลึก Sector และหุ้นนวัตกรรม (สิทธิบัตร & งบการเงิน)")
+
+st.markdown("""
+<div style="background-color:#0d1117; border:1px solid #30363d; padding:20px; border-radius:10px;">
+    <h4 style="color:#58a6ff; margin-top:0;">📊 สรุปภาพรวม Sector ที่น่าเล่นที่สุดตอนนี้ (อ้างอิงข้อมูล Valuation & EPS ล่าสุด)</h4>
+    <p>เพื่อน... จากข้อมูลการเปลี่ยนแปลงของกำไร (EPS Change) และความถูกแพงของ P/E ในตลาดตอนนี้ (ข้อมูล Bloomberg อัปเดต สอดยอดกับพอร์ตสาย Tech & Innovation ของเรา) กูสรุป 3 เซกเตอร์ที่น่าสนใจที่สุดดังนี้:</p>
+    
+    <ul>
+        <li><b>1. Information Technology & Semiconductors (XLK / SMH) — <i>"ของถูกในร่างยักษ์เติบโต"</i></b><br>
+            แม้ราคา YTD จะบวกขึ้นมาเด่นชัด แต่สังเกตมั้ยว่า <b>P/E Change ลดลงไปถึง -4.53</b> เพราะกำไร (EPS) โตระเบิดระเบอร์ถึง <b>+47.31%</b>! นี่คือลักษณะของหุ้นนวัตกรรมที่มี "Patent Moat" ชัดเจน กำไรโตเร็วกว่าราคาหุ้น ทำให้มูลค่าความแพง (Valuation) ลดลง <u><b>คำแนะนำ:</b> ย่อตัวคือโอกาสทองในการสะสมหุ้นกลุ่ม AI, หุ่นยนต์, และชิปโครงสร้างพื้นฐาน</u>
+        </li>
+        <li><b>2. Communication Services & Consumer Discretionary — <i>"หุ้นเติบโตซ่อนมูลค่า"</i></b><br>
+            กลุ่มนี้ EPS โตสูงระดับ <b>+26.64%</b> และ <b>+17.41%</b> แต่ P/E หดตัวลงหนักมาก (-4.39 และ -3.45) แสดงว่าตลาดยังกลัวความเสี่ยงระยะสั้น แต่ไส้ในงบการเงินแกร่งจริง <u><b>คำแนะนำ:</b> เหมาะกับการทยอยสะสมหุ้นแพลตฟอร์ม, สื่อสารความเร็วสูง, และระบบคลาวด์</u>
+        </li>
+        <li><b>3. Energy & Materials (XLB / XLI) — <i>"กลุ่มวัฏจักรที่ได้อานิสงส์ความต้องการใช้โครงสร้างพื้นฐาน"</i></b><br>
+            ด้วยอัตราการเติบโตของ EPS สูงถึง <b>+54.67%</b> (Energy) และ <b>+22.86%</b> (Materials) ทำให้ Valuation ถูกลงอย่างเห็นได้ชัด <u><b>คำแนะนำ:</b> เหมาะกับการเล่นรอบตามข่าวสิทธิบัตรวัสดุศาสตร์และพลังงานสะอาด</u>
+        </li>
+    </ul>
+    
+    <hr style="border-color:#30363d;">
+    <h4 style="color:#f0883e; margin-top:10px;">💡 มุมมองเพื่อนซี้ (Action Strategy สำหรับสายหุ้นนวัตกรรมและสิทธิบัตร):</h4>
+    <p>การเล่นหุ้นนวัตกรรมรอบนี้ อย่าดูแค่กราฟเทคนิคเดี่ยวๆ มึงต้องจับตาดู <b>"อัตราการเผาเงิน (Cash Runway)"</b> และ <b>"ความคืบหน้าของสิทธิบัตร (Patent Milestone)"</b> ควบคู่ไปด้วย ตัวไหนที่งบกำไรเริ่มพลิกเป็นบวกและ P/E เริ่มลดลงสวนทางกับราคา (ตามโมเดล Technology ด้านบน) ให้ใช้จังหวะ Volume Accumulation (Case 1) ทยอยเก็บเข้าพอร์ต แล้วรอจังหวะระเบิดของราคา (Case 2) เพื่อทำกำไรเป็นกอบเป็นกำ!</p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 2. กราฟเทคนิค ---
+st.markdown("---")
 st.subheader("📈 Performance Comparison (Clean Interactive Chart)")
 
 if plot_data:
@@ -146,7 +171,7 @@ if plot_data:
     )
     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
-# --- 3. ตาราง Volume Change ครบทุกระยะ (1D ถึง 3M) ---
+# --- 3. ตาราง Volume Change ครบทุกระยะ ---
 st.subheader("📊 Volume Change Matrix (ครบทุกไทม์เฟรม 1D ถึง 3M สำหรับเทียบนัยยะงบการเงิน)")
 if not df_matrix.empty:
     st.dataframe(df_matrix.sort_values(by="Spread (1D vs 1M)", ascending=False), use_container_width=True, hide_index=True)
@@ -158,4 +183,4 @@ else:
 st.subheader("📋 Fundamental & Valuation Snapshot")
 if not df_fund.empty:
     st.dataframe(df_fund.sort_values(by="Current Return (%)", ascending=False), use_container_width=True, hide_index=True)
-    
+            
